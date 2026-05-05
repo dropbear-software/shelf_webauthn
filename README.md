@@ -20,56 +20,58 @@ Add the package to your `pubspec.yaml` (once published) or reference it locally.
 
 ## Usage
 
-Below is a conceptual example of how you will use the `WebAuthnServer` to handle registration and authentication. 
+The easiest way to get started is using the high-level `WebAuthnEndpoints` router for the `shelf` framework. You simply need to provide an implementation for storing temporary challenges and user credentials.
 
 ```dart
+import 'package:shelf/shelf.dart';
+import 'package:shelf/shelf_io.dart' as shelf_io;
 import 'package:shelf_webauthn/shelf_webauthn.dart';
+import 'package:shelf_router/shelf_router.dart';
 
 void main() async {
-  // Initialize the WebAuthn server with your domain details
+  // 1. Initialize the core WebAuthn Server logic
   final webAuthn = WebAuthnServer(
     rpId: 'example.com',
     expectedOrigin: 'https://example.com',
   );
 
-  // --- Registration (MakeCredential) ---
-  
-  // 1. Generate options to send to the client
-  final creationOptions = webAuthn.generateRegistrationOptions(
-    userId: 'user-123',
-    username: 'alice@example.com',
+  // 2. Wire up the Endpoints Router with your database
+  final endpoints = WebAuthnEndpoints(
+    server: webAuthn,
+    challengeStore: MyDatabaseChallengeStore(),
+    credentialStore: MyDatabaseCredentialStore(),
+    getSessionId: (Request request) => request.headers['x-session-id']!,
+    getUserId: (Request request) => request.headers['x-user-id']!,
   );
-  
-  // (Send options to client, receive response)
-  // ...
-  
-  // 2. Verify the attestation response received from the client
-  // final credentialRecord = await webAuthn.verifyRegistrationResponse(
-  //   response: attestationResponse, 
-  //   expectedChallenge: creationOptions.challenge,
-  // );
-  // 
-  // Save `credentialRecord` to your database!
 
-  // --- Authentication (GetAssertion) ---
+  // 3. Mount the standard WebAuthn endpoints to your app router
+  final appRouter = Router();
+  appRouter.mount('/auth/webauthn/', endpoints.router.call);
 
-  // 1. Generate options to send to the client
-  final requestOptions = webAuthn.generateAuthenticationOptions();
-
-  // (Send options to client, receive response)
-  // ...
-
-  // 2. Verify the assertion response received from the client
-  // final result = await webAuthn.verifyAuthenticationResponse(
-  //   response: assertionResponse,
-  //   expectedChallenge: requestOptions.challenge,
-  //   storedCredential: credentialRecordFromDatabase,
-  // );
-  //
-  // if (result.success) {
-  //   // Update sign count in DB and log user in!
-  // }
+  // Serve the API
+  await shelf_io.serve(appRouter.call, 'localhost', 8080);
 }
+```
+
+### Low-Level API
+
+If you are not using `shelf_router` or need custom logic, you can interact directly with the stateless `WebAuthnServer` instance to generate options and verify JSON responses.
+
+```dart
+// 1. Generate options
+final creationOptions = webAuthn.generateRegistrationOptions(
+  userId: 'user-123',
+  username: 'alice@example.com',
+);
+
+// 2. Parse JSON response from the client
+final response = parseRegistrationResponseJson(jsonPayload);
+
+// 3. Verify the attestation
+final credentialRecord = await webAuthn.verifyRegistrationResponse(
+  response: response, 
+  expectedChallenge: creationOptions.challenge,
+);
 ```
 
 ## Additional information

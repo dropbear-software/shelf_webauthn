@@ -12,14 +12,15 @@ A server-side WebAuthentication (WebAuthn) Relying Party (RP) implementation for
   - **`crypto`**: For SHA-256 hashing.
 - **Architecture**: 
   - **Stateless Core**: The `WebAuthnServer` class in `lib/src/shelf_webauthn_base.dart` is the main entry point.
-  - **Data Models**: Strongly-typed classes for WebAuthn data structures (options, responses, records).
-  - **Spec Alignment**: Targets Section 7 of the W3C Web Authentication specification.
+  - **Shelf Integration**: The `WebAuthnEndpoints` class in `lib/src/shelf/endpoints.dart` provides a pre-built `shelf_router` for rapid integration.
+  - **Data Models**: Strongly-typed, immutable (`final`, `const`) classes for WebAuthn data structures, located in `lib/src/models/`.
+  - **Spec Alignment**: Strictly implements Sections 7.1 and 7.2 of the W3C Web Authentication specification.
 
 ## Building and Running
 
 - **Fetch Dependencies**: `dart pub get`
 - **Run Tests**: `dart test`
-- **Run Example**: `dart run example/shelf_webauthn_example.dart`
+- **Run Example**: `dart run example/shelf_webauthn_example.dart` (Serves an HTML frontend demo at http://localhost:8080)
 - **Static Analysis**: `dart analyze`
 - **Formatting**: `dart format .`
 
@@ -27,21 +28,18 @@ A server-side WebAuthentication (WebAuthn) Relying Party (RP) implementation for
 
 - `lib/`: Contains the core logic.
   - `shelf_webauthn.dart`: Main library export.
-  - `src/`: Internal implementation details (stubs currently).
-- `docs/`: 
-  - `PRD.md`: Product Requirements Document.
-  - `auth_data_parsing_plan.md`: Detailed plan for parsing `authenticatorData`.
-- `test/`: 
-  - `shelf_webauthn_test.dart`: Unit tests for the server.
-  - `vectors.dart`: Official W3C WebAuthn spec test vectors (Section 16).
-- `tool/`: Helper scripts for development (e.g., `extract_vectors.dart`).
-- `spec/`: Local copy of the WebAuthn specification.
+  - `src/shelf_webauthn_base.dart`: Core stateless server logic.
+  - `src/models/`: Immutable data models.
+  - `src/helpers/`: Parsing utilities for CBOR, COSE keys, and client data.
+  - `src/shelf/`: Integration layer containing parsers and the `WebAuthnEndpoints` router.
+- `test/`: Comprehensive test suite using official W3C test vectors (`vectors.dart`).
+- `example/`: Contains a fully functional, end-to-end `shelf_io` server and an `index.html` frontend demo.
 
 ## Development Conventions
 
 - **Spec Compliance**: All implementation steps should strictly follow the W3C WebAuthn specification (Sections 7.1 and 7.2).
 - **Testing**: Use the provided `testVectors` in `test/vectors.dart` for rigorous validation of registration and authentication flows.
 - **Error Handling**: Throw descriptive exceptions or use `VerificationResult` to return status.
-- **Coding Style**: Adhere to [Effective Dart](https://dart.dev/effective-dart) guidelines.
+- **Coding Style**: Adhere to [Effective Dart](https://dart.dev/effective-dart) guidelines. Models should be `final` and implement value equality.
 - **Formatting**: Run `dart format .` before committing.
 - **Analysis**: Ensure `dart analyze` passes with no issues.
