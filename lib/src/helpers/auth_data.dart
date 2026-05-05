@@ -136,13 +136,14 @@ class AuthenticatorData {
       'y': base64Url.encode(y).replaceAll('=', ''),
     };
 
-    switch (alg) {
-      case -7:
-        jwk['alg'] = 'ES256';
-      case -35:
-        jwk['alg'] = 'ES384';
-      case -36:
-        jwk['alg'] = 'ES512';
+    if (alg != null) {
+      final algStr = switch (alg) {
+        -7 => 'ES256',
+        -35 => 'ES384',
+        -36 => 'ES512',
+        _ => null,
+      };
+      if (algStr != null) jwk['alg'] = algStr;
     }
 
     return EcdsaPublicKey.importJsonWebKey(jwk, curve);
@@ -231,41 +232,57 @@ class AuthenticatorData {
 
       // credentialPublicKey (CBOR variable length)
       final remaining = data.sublist(offset);
-      final (cborValue, consumed) = decodeOne(remaining);
+      try {
+        final (cborValue, consumed) = decodeOne(remaining);
 
-      if (cborValue is CborMap) {
-        final mapObj = cborValue.toObject();
-        if (mapObj is Map) {
-          credentialPublicKey = mapObj.cast<int, dynamic>();
+        if (cborValue is CborMap) {
+          final mapObj = cborValue.toObject();
+          if (mapObj is Map) {
+            credentialPublicKey = mapObj.cast<int, dynamic>();
+          } else {
+            throw InvalidAuthenticatorDataException(
+              'Credential public key is not a CBOR map object',
+            );
+          }
         } else {
           throw InvalidAuthenticatorDataException(
-            'Credential public key is not a CBOR map object',
+            'Credential public key is not a CBOR map',
           );
         }
-      } else {
+
+        // Advance offset past the public key
+        offset += consumed;
+      } on WebAuthnException {
+        rethrow;
+      } catch (e) {
         throw InvalidAuthenticatorDataException(
-          'Credential public key is not a CBOR map',
+          'Failed to decode credential public key: $e',
         );
       }
-
-      // Advance offset past the public key
-      offset += consumed;
     }
 
     // 5. extensions (if ED flag set)
     Map<String, dynamic>? extensions;
     if ((flags & _Flags.ed) != 0) {
       final remaining = data.sublist(offset);
-      final (cborValue, consumed) = decodeOne(remaining);
+      try {
+        final (cborValue, consumed) = decodeOne(remaining);
 
-      if (cborValue is CborMap) {
-        final mapObj = cborValue.toObject();
-        if (mapObj is Map) {
-          extensions = mapObj.cast<String, dynamic>();
+        if (cborValue is CborMap) {
+          final mapObj = cborValue.toObject();
+          if (mapObj is Map) {
+            extensions = mapObj.cast<String, dynamic>();
+          }
         }
-      }
 
-      offset += consumed;
+        offset += consumed;
+      } on WebAuthnException {
+        rethrow;
+      } catch (e) {
+        throw InvalidAuthenticatorDataException(
+          'Failed to decode extension data: $e',
+        );
+      }
     }
 
     // Security check: Verify no trailing garbage bytes.

@@ -20,7 +20,11 @@ import '../exceptions.dart';
   final sink = cbor.decoder.startChunkedConversion(innerSink);
 
   for (int i = 0; i < data.length; i++) {
-    sink.add([data[i]]);
+    try {
+      sink.add([data[i]]);
+    } catch (e) {
+      throw InvalidAuthenticatorDataException('Malformed CBOR: $e');
+    }
     if (result != null) {
       consumed = i + 1;
       break;
