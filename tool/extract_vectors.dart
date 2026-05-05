@@ -4,9 +4,20 @@ void main() {
   final file = File('spec/webauthn_spec.html');
   final html = file.readAsStringSync();
 
-  final sectionRegex = RegExp(r'<h3[^>]*id="(sctn-test-vectors-[^"]+)"[^>]*>.*?</h3>(.*?)(?=<h3|$)', dotAll: true);
+  final sectionRegex = RegExp(
+    r'<h3[^>]*id="(sctn-test-vectors-[^"]+)"[^>]*>.*?</h3>(.*?)(?=<h3|$)',
+    dotAll: true,
+  );
   final preRegex = RegExp(r'<pre[^>]*>(.*?)</pre>', dotAll: true);
-  final varRegex = RegExp(r'<c- nc>([^<]+)</c->\s*<c- o>=</c->\s*h<c- t>'"'"'([^'"'"']+)'"'"'</c->');
+  final varRegex = RegExp(
+    r'<c- nc>([^<]+)</c->\s*<c- o>=</c->\s*h<c- t>'
+    "'"
+    '([^'
+    "'"
+    ']+)'
+    "'"
+    '</c->',
+  );
 
   final out = StringBuffer();
   out.writeln('// GENERATED CODE - DO NOT MODIFY BY HAND');
@@ -16,7 +27,9 @@ void main() {
   out.writeln('  final String name;');
   out.writeln('  final Map<String, String> registration;');
   out.writeln('  final Map<String, String> authentication;');
-  out.writeln('  const WebAuthnTestVector({required this.name, required this.registration, required this.authentication});');
+  out.writeln(
+    '  const WebAuthnTestVector({required this.name, required this.registration, required this.authentication});',
+  );
   out.writeln('}');
   out.writeln();
   out.writeln('const testVectors = <WebAuthnTestVector>[');
@@ -25,7 +38,7 @@ void main() {
   for (final match in matches) {
     final id = match.group(1)!;
     final content = match.group(2)!;
-    
+
     // There are usually two <pre> blocks: one for Registration, one for Authentication
     // Sometimes only one if it's the root cert.
     if (id == 'sctn-test-vectors-attestation-root-cert') continue;
@@ -44,7 +57,7 @@ void main() {
       }
     }
 
-    if (pres.length >= 1) parseBlock(pres[0].group(1)!, reg);
+    if (pres.isNotEmpty) parseBlock(pres[0].group(1)!, reg);
     if (pres.length >= 2) parseBlock(pres[1].group(1)!, auth);
 
     String mapToCode(Map<String, String> m) {
@@ -63,7 +76,7 @@ void main() {
     out.writeln('    authentication: ${mapToCode(auth)},');
     out.writeln('  ),');
   }
-  
+
   out.writeln('];');
 
   File('test/vectors.dart').writeAsStringSync(out.toString());
