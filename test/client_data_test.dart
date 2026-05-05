@@ -79,5 +79,13 @@ void main() {
         throwsA(isA<InvalidAuthenticatorDataException>()),
       );
     });
+
+    test('Throws on oversized clientDataJSON', () {
+      final largeData = Uint8List(65537);
+      expect(
+        () => CollectedClientData.parse(largeData),
+        throwsA(isA<InvalidAuthenticatorDataException>()),
+      );
+    });
   });
 }
