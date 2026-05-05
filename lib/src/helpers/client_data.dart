@@ -117,6 +117,12 @@ class CollectedClientData {
 
   /// Parses the raw binary `clientDataJSON`.
   static CollectedClientData parse(Uint8List data) {
+    if (data.length > 65536) {
+      throw InvalidAuthenticatorDataException(
+        'clientDataJSON exceeds maximum allowed size (64KB)',
+      );
+    }
+
     late Map<String, dynamic> map;
     try {
       final jsonString = utf8.decode(data);
