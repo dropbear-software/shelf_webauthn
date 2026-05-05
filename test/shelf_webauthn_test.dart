@@ -86,6 +86,32 @@ void main() {
     });
   });
 
+  group('WebAuthnServer.generateAuthenticationOptions', () {
+    test('generates valid options with secure challenge', () {
+      final server = WebAuthnServer(
+        rpId: 'example.org',
+        expectedOrigin: 'https://example.org',
+      );
+
+      final options = server.generateAuthenticationOptions(
+        timeout: 60000,
+        userVerification: 'required',
+      );
+
+      expect(options.rpId, equals('example.org'));
+      expect(options.timeout, equals(60000));
+      expect(options.userVerification, equals('required'));
+
+      // Challenge must be base64url encoded and at least 16 bytes
+      expect(options.challenge, isNotEmpty);
+      final challengeBytes = base64Url.decode(
+        base64Url.normalize(options.challenge),
+      );
+      expect(challengeBytes.length, greaterThanOrEqualTo(16));
+      expect(options.challenge.contains('='), isFalse); // No padding
+    });
+  });
+
   group('WebAuthnServer.verifyRegistrationResponse', () {
     test('successfully verifies a valid "none" attestation response', () async {
       final server = WebAuthnServer(

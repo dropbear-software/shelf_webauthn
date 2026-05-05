@@ -155,7 +155,7 @@ class WebAuthnServer {
       final verifier = NoneAttestationVerifier();
       await verifier.verify(attObj.attStmt, authData, clientDataHash);
     } else {
-      throw WebAuthnException('Unsupported attestation format: ${attObj.fmt}');
+      throw WebAuthnException('Unsupported attestation format');
     }
 
     // 25: Verify credentialId length <= 1023
@@ -202,11 +202,24 @@ class WebAuthnServer {
 
   /// Generates the options required by the client to request an assertion.
   PublicKeyCredentialRequestOptions generateAuthenticationOptions({
-    String? username,
+    int? timeout,
+    List<PublicKeyCredentialDescriptor>? allowCredentials,
+    String? userVerification,
+    Map<String, dynamic>? extensions,
   }) {
-    // TODO: Implement secure random challenge generation and build options
-    throw UnimplementedError(
-      'Authentication generation is not yet implemented.',
+    final random = Random.secure();
+    final challengeBytes = Uint8List.fromList(
+      List<int>.generate(32, (_) => random.nextInt(256)),
+    );
+    final challenge = base64Url.encode(challengeBytes).replaceAll('=', '');
+
+    return PublicKeyCredentialRequestOptions(
+      challenge: challenge,
+      timeout: timeout,
+      rpId: rpId,
+      allowCredentials: allowCredentials,
+      userVerification: userVerification,
+      extensions: extensions,
     );
   }
 

@@ -185,18 +185,89 @@ final class PublicKeyCredentialCreationOptions {
       const MapEquality().hash(extensions);
 }
 
+final class PublicKeyCredentialDescriptor {
+  final String type;
+  final String id;
+  final List<String>? transports;
+
+  const PublicKeyCredentialDescriptor({
+    this.type = 'public-key',
+    required this.id,
+    this.transports,
+  });
+
+  Map<String, dynamic> toJson() {
+    return {
+      'type': type,
+      'id': id,
+      if (transports != null) 'transports': transports,
+    };
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is PublicKeyCredentialDescriptor &&
+          runtimeType == other.runtimeType &&
+          type == other.type &&
+          id == other.id &&
+          const ListEquality().equals(transports, other.transports);
+
+  @override
+  int get hashCode =>
+      type.hashCode ^ id.hashCode ^ const ListEquality().hash(transports);
+}
+
 final class PublicKeyCredentialRequestOptions {
   final String challenge;
+  final int? timeout;
+  final String? rpId;
+  final List<PublicKeyCredentialDescriptor>? allowCredentials;
+  final String? userVerification;
+  final Map<String, dynamic>? extensions;
 
-  const PublicKeyCredentialRequestOptions({required this.challenge});
+  const PublicKeyCredentialRequestOptions({
+    required this.challenge,
+    this.timeout,
+    this.rpId,
+    this.allowCredentials,
+    this.userVerification,
+    this.extensions,
+  });
+
+  Map<String, dynamic> toJson() {
+    return {
+      'challenge': challenge,
+      if (timeout != null) 'timeout': timeout,
+      if (rpId != null) 'rpId': rpId,
+      if (allowCredentials != null)
+        'allowCredentials': allowCredentials!.map((e) => e.toJson()).toList(),
+      if (userVerification != null) 'userVerification': userVerification,
+      if (extensions != null) 'extensions': extensions,
+    };
+  }
 
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
       other is PublicKeyCredentialRequestOptions &&
           runtimeType == other.runtimeType &&
-          challenge == other.challenge;
+          challenge == other.challenge &&
+          timeout == other.timeout &&
+          rpId == other.rpId &&
+          const ListEquality().equals(
+            allowCredentials,
+            other.allowCredentials,
+          ) &&
+          userVerification == other.userVerification &&
+          const MapEquality().equals(extensions, other.extensions);
 
   @override
-  int get hashCode => challenge.hashCode;
+  int get hashCode =>
+      challenge.hashCode ^
+      timeout.hashCode ^
+      rpId.hashCode ^
+      const ListEquality().hash(allowCredentials) ^
+      userVerification.hashCode ^
+      const MapEquality().hash(extensions);
 }
