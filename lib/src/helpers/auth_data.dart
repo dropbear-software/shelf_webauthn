@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:cbor/cbor.dart';
 import 'package:webcrypto/webcrypto.dart';
 import '../exceptions.dart';
+import 'cbor_utils.dart';
 
 /// Represents the parsed `authenticatorData` (authData) structure.
 ///
@@ -131,16 +132,15 @@ class AuthenticatorData {
 
     return switch (alg) {
       -257 => () {
-        jwk['alg'] = 'RS256';
-        return RsassaPkcs1V15PublicKey.importJsonWebKey(jwk, Hash.sha256);
-      }(),
+          jwk['alg'] = 'RS256';
+          return RsassaPkcs1V15PublicKey.importJsonWebKey(jwk, Hash.sha256);
+        }(),
       -37 => () {
-        jwk['alg'] = 'PS256';
-        return RsaPssPublicKey.importJsonWebKey(jwk, Hash.sha256);
-      }(),
-      _ => throw UnsupportedAlgorithmException(
-        'Unsupported RSA algorithm: $alg',
-      ),
+          jwk['alg'] = 'PS256';
+          return RsaPssPublicKey.importJsonWebKey(jwk, Hash.sha256);
+        }(),
+      _ =>
+        throw UnsupportedAlgorithmException('Unsupported RSA algorithm: $alg'),
     };
   }
 
@@ -153,7 +153,11 @@ class AuthenticatorData {
     }
 
     final buffer = data.buffer;
-    final byteData = ByteData.view(buffer, data.offsetInBytes, data.length);
+    final byteData = ByteData.view(
+      buffer,
+      data.offsetInBytes,
+      data.length,
+    );
     int offset = 0;
 
     // 1. rpIdHash (32 bytes)
@@ -198,39 +202,41 @@ class AuthenticatorData {
 
       // credentialPublicKey (CBOR variable length)
       final remaining = data.sublist(offset);
-      if (remaining.isEmpty) {
-        throw InvalidAuthenticatorDataException('Missing credentialPublicKey');
-      }
+      final (cborValue, consumed) = decodeOne(remaining);
 
-      try {
-        final decoded = cbor.decode(remaining);
-        if (decoded is CborMap) {
-          // Cast the map to Map<int, dynamic> since COSE keys are integers.
-          // Note: cbor.decode().toObject() returns Map<dynamic, dynamic>.
-          final mapObj = decoded.toObject();
-          if (mapObj is Map) {
-            credentialPublicKey = mapObj.cast<int, dynamic>();
-          } else {
-            throw InvalidAuthenticatorDataException(
-              'Credential public key is not a CBOR map object',
-            );
-          }
+      if (cborValue is CborMap) {
+        final mapObj = cborValue.toObject();
+        if (mapObj is Map) {
+          credentialPublicKey = mapObj.cast<int, dynamic>();
         } else {
           throw InvalidAuthenticatorDataException(
-            'Credential public key is not a CBOR map',
+            'Credential public key is not a CBOR map object',
           );
         }
-      } catch (e) {
+      } else {
         throw InvalidAuthenticatorDataException(
-          'Failed to decode credential public key: $e',
+          'Credential public key is not a CBOR map',
         );
       }
+
+      // Advance offset past the public key
+      offset += consumed;
     }
 
     // 5. extensions (if ED flag set)
     Map<String, dynamic>? extensions;
     if ((flags & 0x80) != 0) {
-      // TODO: Implement extension parsing.
+      final remaining = data.sublist(offset);
+      final (cborValue, consumed) = decodeOne(remaining);
+
+      if (cborValue is CborMap) {
+        final mapObj = cborValue.toObject();
+        if (mapObj is Map) {
+          extensions = mapObj.cast<String, dynamic>();
+        }
+      }
+
+      offset += consumed;
     }
 
     return AuthenticatorData(
