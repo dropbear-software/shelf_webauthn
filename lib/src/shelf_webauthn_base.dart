@@ -4,7 +4,9 @@ import 'dart:typed_data';
 import 'package:collection/collection.dart';
 import 'package:crypto/crypto.dart' as crypto;
 import 'package:cbor/cbor.dart';
+import 'package:webcrypto/webcrypto.dart';
 import 'models/models.dart';
+import 'helpers/auth_data.dart';
 import 'helpers/client_data.dart';
 import 'helpers/attestation_object.dart';
 import 'helpers/attestation_statement.dart';
@@ -213,10 +215,153 @@ class WebAuthnServer {
     required AuthenticatorAssertionResponse response,
     required String expectedChallenge,
     required CredentialRecord storedCredential,
+    bool requireUserVerification = false,
   }) async {
-    // TODO: Implement Section 7.2 of the WebAuthn spec
-    throw UnimplementedError(
-      'Authentication verification is not yet implemented.',
+    // 7-10: Parse and verify clientDataJSON
+    final clientData = CollectedClientData.parse(response.clientDataJSON);
+
+    final expectedChallengeBytes = base64Url.decode(
+      base64Url.normalize(expectedChallenge),
+    );
+    clientData.verify(
+      expectedType: ClientDataType.get,
+      expectedChallenge: expectedChallengeBytes,
+      expectedOrigin: expectedOrigin,
+    );
+
+    // 14: Parse and verify authenticatorData
+    final authData = AuthenticatorData.parse(response.authenticatorData);
+
+    final expectedRpIdHash = Uint8List.fromList(
+      crypto.sha256.convert(utf8.encode(rpId)).bytes,
+    );
+    if (!const ListEquality().equals(authData.rpIdHash, expectedRpIdHash)) {
+      throw InvalidAuthenticatorDataException('rpIdHash mismatch');
+    }
+
+    // 15: Verify UP bit
+    if (!authData.isUserPresent) {
+      throw InvalidAuthenticatorDataException(
+        'User Presence (UP) flag not set',
+      );
+    }
+
+    // 16: Verify UV bit if required
+    if (requireUserVerification && !authData.isUserVerified) {
+      throw InvalidAuthenticatorDataException(
+        'User Verification (UV) flag not set but required',
+      );
+    }
+
+    // 17: Backup Eligibility and State logic
+    if (!authData.isBackupEligible && authData.isBackedUp) {
+      throw InvalidAuthenticatorDataException(
+        'Backup State (BS) is set but Backup Eligibility (BE) is not',
+      );
+    }
+
+    // 18: Verify backup state changes against the storedCredential.
+    // Spec allows RP policy to reject if BE changes unexpectedly, but we'll
+    // simply log or accept the new state for now.
+    if (storedCredential.backupEligible && !authData.isBackupEligible) {
+      // A previously backup eligible credential is no longer backup eligible.
+      // This is unusual but technically possible.
+    }
+
+    // 19: Compute clientDataHash
+    final clientDataHash = Uint8List.fromList(
+      crypto.sha256.convert(response.clientDataJSON).bytes,
+    );
+
+    // 20: Signature Verification
+    final concatData = Uint8List.fromList([
+      ...response.authenticatorData,
+      ...clientDataHash,
+    ]);
+
+    // Parse the stored CBOR public key map
+    final cborValue = cbor.decode(storedCredential.publicKey);
+    if (cborValue is! CborMap) {
+      throw WebAuthnException('Stored public key is not a valid CBOR map');
+    }
+
+    final mapObj = cborValue.toObject();
+    if (mapObj is! Map) {
+      throw WebAuthnException('Stored public key map is invalid');
+    }
+    final credentialPublicKeyMap = mapObj.cast<int, dynamic>();
+
+    // Reconstruct the WebCrypto public key object
+    final publicKey = await parseCosePublicKey(credentialPublicKeyMap);
+    if (publicKey == null) {
+      throw WebAuthnException('Failed to parse stored public key');
+    }
+
+    bool signatureValid = false;
+    try {
+      if (publicKey is EcdsaPublicKey) {
+        // WebCrypto expects raw R|S signatures, but WebAuthn authenticators
+        // return ASN.1 DER encoded signatures. We must convert them.
+        int curveSizeBytes;
+        final alg = credentialPublicKeyMap[Cose.alg] as int?;
+        if (alg == -7) {
+          curveSizeBytes = 32;
+        } else if (alg == -35) {
+          curveSizeBytes = 48;
+        } else if (alg == -36) {
+          curveSizeBytes = 66;
+        } else {
+          throw WebAuthnException(
+            'Unsupported ECDSA alg for signature conversion: $alg',
+          );
+        }
+
+        final rawSignature = convertDerToRawEcdsaSignature(
+          response.signature,
+          curveSizeBytes,
+        );
+
+        signatureValid = await publicKey.verifyBytes(
+          rawSignature,
+          concatData,
+          Hash.sha256,
+        );
+      } else if (publicKey is RsassaPkcs1V15PublicKey) {
+        signatureValid = await publicKey.verifyBytes(
+          response.signature,
+          concatData,
+        );
+      } else if (publicKey is RsaPssPublicKey) {
+        signatureValid = await publicKey.verifyBytes(
+          response.signature,
+          concatData,
+          32, // saltLength for PS256 is equal to the hash length (32 bytes)
+        );
+      } else {
+        throw WebAuthnException('Unsupported public key type for verification');
+      }
+    } catch (e) {
+      throw WebAuthnException('Signature verification failed: $e');
+    }
+
+    if (!signatureValid) {
+      throw WebAuthnException('Invalid signature');
+    }
+
+    // 21: Verify signCount
+    if (authData.signCount != 0 || storedCredential.signCount != 0) {
+      if (authData.signCount <= storedCredential.signCount) {
+        throw WebAuthnException(
+          'Signature counter is not strictly strictly greater than the stored counter. '
+          'Potential cloned authenticator detected.',
+        );
+      }
+    }
+
+    // 24: Return successful VerificationResult
+    return VerificationResult(
+      success: true,
+      updatedSignCount: authData.signCount,
     );
   }
 }

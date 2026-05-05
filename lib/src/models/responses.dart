@@ -39,6 +39,42 @@ final class AuthenticatorAttestationResponse {
 }
 
 final class AuthenticatorAssertionResponse {
-  // TODO: Add fields for clientDataJSON, authenticatorData, signature, userHandle
-  const AuthenticatorAssertionResponse();
+  /// The JSON-compatible serialization of client data.
+  final Uint8List clientDataJSON;
+
+  /// The authenticator data.
+  final Uint8List authenticatorData;
+
+  /// The signature over the authenticator data and client data hash.
+  final Uint8List signature;
+
+  /// The user handle returned by the authenticator, if any.
+  final Uint8List? userHandle;
+
+  const AuthenticatorAssertionResponse({
+    required this.clientDataJSON,
+    required this.authenticatorData,
+    required this.signature,
+    this.userHandle,
+  });
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is AuthenticatorAssertionResponse &&
+          runtimeType == other.runtimeType &&
+          const ListEquality().equals(clientDataJSON, other.clientDataJSON) &&
+          const ListEquality().equals(
+            authenticatorData,
+            other.authenticatorData,
+          ) &&
+          const ListEquality().equals(signature, other.signature) &&
+          const ListEquality().equals(userHandle, other.userHandle);
+
+  @override
+  int get hashCode =>
+      const ListEquality().hash(clientDataJSON) ^
+      const ListEquality().hash(authenticatorData) ^
+      const ListEquality().hash(signature) ^
+      const ListEquality().hash(userHandle);
 }

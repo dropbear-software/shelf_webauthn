@@ -30,6 +30,26 @@ AuthenticatorAttestationResponse buildRegistrationResponse(
   );
 }
 
+AuthenticatorAssertionResponse buildAuthenticationResponse(
+  Map<String, String> data,
+) {
+  final clientDataJSONBytes = Uint8List.fromList(
+    hex.decode(data['clientDataJSON']!),
+  );
+
+  final authenticatorDataBytes = Uint8List.fromList(
+    hex.decode(data['authenticatorData']!),
+  );
+
+  final signatureBytes = Uint8List.fromList(hex.decode(data['signature']!));
+
+  return AuthenticatorAssertionResponse(
+    clientDataJSON: clientDataJSONBytes,
+    authenticatorData: authenticatorDataBytes,
+    signature: signatureBytes,
+  );
+}
+
 void main() {
   group('WebAuthnServer.generateRegistrationOptions', () {
     test('generates valid options with secure challenge', () {
@@ -121,6 +141,88 @@ void main() {
           expectedChallenge: expectedChallengeBase64Url,
         ),
         throwsA(isA<InvalidAuthenticatorDataException>()),
+      );
+    });
+  });
+
+  group('WebAuthnServer.verifyAuthenticationResponse', () {
+    test('successfully verifies a valid assertion response', () async {
+      final server = WebAuthnServer(
+        rpId: 'example.org',
+        expectedOrigin: 'https://example.org',
+      );
+
+      final vector = testVectors.firstWhere(
+        (v) => v.name == 'sctn-test-vectors-none-es256',
+      );
+
+      // First, get the stored credential from the registration phase
+      final expectedRegChallengeBase64Url = getChallengeFromVector(
+        vector.registration,
+      );
+      final regResponse = buildRegistrationResponse(vector.registration);
+      final storedCredential = await server.verifyRegistrationResponse(
+        response: regResponse,
+        expectedChallenge: expectedRegChallengeBase64Url,
+      );
+
+      // Now verify the authentication phase
+      final expectedAuthChallengeBase64Url = getChallengeFromVector(
+        vector.authentication,
+      );
+      final authResponse = buildAuthenticationResponse(vector.authentication);
+
+      final result = await server.verifyAuthenticationResponse(
+        response: authResponse,
+        expectedChallenge: expectedAuthChallengeBase64Url,
+        storedCredential: storedCredential,
+      );
+
+      expect(result.success, isTrue);
+      expect(result.updatedSignCount, equals(0));
+    });
+
+    test('throws when signature is invalid', () async {
+      final server = WebAuthnServer(
+        rpId: 'example.org',
+        expectedOrigin: 'https://example.org',
+      );
+
+      final vector = testVectors.firstWhere(
+        (v) => v.name == 'sctn-test-vectors-none-es256',
+      );
+
+      final expectedRegChallengeBase64Url = getChallengeFromVector(
+        vector.registration,
+      );
+      final regResponse = buildRegistrationResponse(vector.registration);
+      final storedCredential = await server.verifyRegistrationResponse(
+        response: regResponse,
+        expectedChallenge: expectedRegChallengeBase64Url,
+      );
+
+      final expectedAuthChallengeBase64Url = getChallengeFromVector(
+        vector.authentication,
+      );
+      final authResponse = buildAuthenticationResponse(vector.authentication);
+
+      // Tamper with the signature
+      final badSignature = Uint8List.fromList(authResponse.signature);
+      badSignature[0] ^= 0xFF; // Flip some bits
+
+      final badResponse = AuthenticatorAssertionResponse(
+        clientDataJSON: authResponse.clientDataJSON,
+        authenticatorData: authResponse.authenticatorData,
+        signature: badSignature,
+      );
+
+      await expectLater(
+        server.verifyAuthenticationResponse(
+          response: badResponse,
+          expectedChallenge: expectedAuthChallengeBase64Url,
+          storedCredential: storedCredential,
+        ),
+        throwsA(isA<WebAuthnException>()),
       );
     });
   });
