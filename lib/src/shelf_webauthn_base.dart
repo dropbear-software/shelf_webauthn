@@ -1,45 +1,4 @@
-// ---------------------------------------------------------------------------
-// Data Models (Stubs)
-// ---------------------------------------------------------------------------
-
-class PublicKeyCredentialCreationOptions {
-  final String challenge;
-
-  PublicKeyCredentialCreationOptions({required this.challenge});
-}
-
-class PublicKeyCredentialRequestOptions {
-  final String challenge;
-
-  PublicKeyCredentialRequestOptions({required this.challenge});
-}
-
-class AuthenticatorAttestationResponse {
-  // TODO: Add fields for clientDataJSON, attestationObject
-}
-
-class AuthenticatorAssertionResponse {
-  // TODO: Add fields for clientDataJSON, authenticatorData, signature, userHandle
-}
-
-class CredentialRecord {
-  final String credentialId;
-  final List<int> publicKey;
-  final int signCount;
-
-  CredentialRecord({
-    required this.credentialId,
-    required this.publicKey,
-    required this.signCount,
-  });
-}
-
-class VerificationResult {
-  final bool success;
-  final int updatedSignCount;
-
-  VerificationResult({required this.success, required this.updatedSignCount});
-}
+import 'models/models.dart';
 
 // ---------------------------------------------------------------------------
 // Core Server Class

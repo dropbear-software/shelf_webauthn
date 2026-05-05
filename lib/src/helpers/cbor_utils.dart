@@ -9,7 +9,7 @@ import '../exceptions.dart';
 /// This is necessary because the standard `cbor.decode()` does not return
 /// consumption counts, which are required for parsing contiguous variable-length
 /// fields in WebAuthn (e.g., Public Key followed by Extensions).
-(CborValue value, int consumed) decodeOne(Uint8List data) {
+({CborValue value, int consumed}) decodeOne(Uint8List data) {
   CborValue? result;
   int consumed = 0;
 
@@ -50,5 +50,5 @@ import '../exceptions.dart';
     }
   }
 
-  return (result!, consumed);
+  return (value: result!, consumed: consumed);
 }
