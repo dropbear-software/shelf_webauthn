@@ -4,3 +4,4 @@ library;
 
 export 'src/shelf_webauthn_base.dart';
 export 'src/helpers/auth_data.dart';
+export 'src/helpers/client_data.dart';
