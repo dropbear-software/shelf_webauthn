@@ -7,6 +7,29 @@ import 'package:convert/convert.dart';
 
 import 'vectors.dart';
 
+String getChallengeFromVector(Map<String, String> data) {
+  final expectedChallengeHex = data['challenge']!;
+  final expectedChallengeBytes = hex.decode(expectedChallengeHex);
+  return base64Url.encode(expectedChallengeBytes).replaceAll('=', '');
+}
+
+AuthenticatorAttestationResponse buildRegistrationResponse(
+  Map<String, String> data,
+) {
+  final clientDataJSONBytes = Uint8List.fromList(
+    hex.decode(data['clientDataJSON']!),
+  );
+
+  final attestationObjectBytes = Uint8List.fromList(
+    hex.decode(data['attestationObject']!),
+  );
+
+  return AuthenticatorAttestationResponse(
+    clientDataJSON: clientDataJSONBytes,
+    attestationObject: attestationObjectBytes,
+  );
+}
+
 void main() {
   group('WebAuthnServer.generateRegistrationOptions', () {
     test('generates valid options with secure challenge', () {
@@ -54,25 +77,10 @@ void main() {
         (v) => v.name == 'sctn-test-vectors-none-es256',
       );
 
-      // The challenge from the vector
-      final expectedChallengeHex = vector.registration['challenge']!;
-      final expectedChallengeBytes = hex.decode(expectedChallengeHex);
-      final expectedChallengeBase64Url = base64Url
-          .encode(expectedChallengeBytes)
-          .replaceAll('=', '');
-
-      final clientDataJSONBytes = Uint8List.fromList(
-        hex.decode(vector.registration['clientDataJSON']!),
+      final expectedChallengeBase64Url = getChallengeFromVector(
+        vector.registration,
       );
-
-      final attestationObjectBytes = Uint8List.fromList(
-        hex.decode(vector.registration['attestationObject']!),
-      );
-
-      final response = AuthenticatorAttestationResponse(
-        clientDataJSON: clientDataJSONBytes,
-        attestationObject: attestationObjectBytes,
-      );
+      final response = buildRegistrationResponse(vector.registration);
 
       final credentialRecord = await server.verifyRegistrationResponse(
         response: response,
@@ -102,24 +110,10 @@ void main() {
         (v) => v.name == 'sctn-test-vectors-none-es256',
       );
 
-      final expectedChallengeHex = vector.registration['challenge']!;
-      final expectedChallengeBytes = hex.decode(expectedChallengeHex);
-      final expectedChallengeBase64Url = base64Url
-          .encode(expectedChallengeBytes)
-          .replaceAll('=', '');
-
-      final clientDataJSONBytes = Uint8List.fromList(
-        hex.decode(vector.registration['clientDataJSON']!),
+      final expectedChallengeBase64Url = getChallengeFromVector(
+        vector.registration,
       );
-
-      final attestationObjectBytes = Uint8List.fromList(
-        hex.decode(vector.registration['attestationObject']!),
-      );
-
-      final response = AuthenticatorAttestationResponse(
-        clientDataJSON: clientDataJSONBytes,
-        attestationObject: attestationObjectBytes,
-      );
+      final response = buildRegistrationResponse(vector.registration);
 
       await expectLater(
         server.verifyRegistrationResponse(
