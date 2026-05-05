@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebAuthn Dart Demo</title>
+    <style>
+        body { font-family: system-ui, -apple-system, sans-serif; max-width: 600px; margin: 40px auto; padding: 0 20px; line-height: 1.6; }
+        button { padding: 10px 20px; font-size: 16px; cursor: pointer; margin-right: 10px; }
+        #status { margin-top: 20px; padding: 15px; border-radius: 4px; display: none; }
+        .success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .error { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        pre { background: #f4f4f4; padding: 10px; overflow-x: auto; font-size: 12px; }
+    </style>
+</head>
+<body>
+    <h1>WebAuthn Dart Demo</h1>
+    <p>This demo uses an in-memory store. Your credentials will be lost if the server restarts.</p>
+    
+    <div>
+        <label>Username: <input type="text" id="username" value="alice@example.com"></label>
+    </div>
+    <br>
+
+    <button onclick="register()">1. Register New Credential</button>
+    <button onclick="authenticate()">2. Authenticate</button>
+
+    <div id="status"></div>
+    <pre id="log"></pre>
+
+    <script>
+        // --- Base64URL Utility Functions ---
+        // WebAuthn requires passing ArrayBuffers, but JSON uses Base64URL strings.
+        function bufferToBase64url(buffer) {
+            const bytes = new Uint8Array(buffer);
+            let str = '';
+            for (const charCode of bytes) {
+                str += String.fromCharCode(charCode);
+            }
+            const base64String = btoa(str);
+            return base64String.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+        }
+
+        function base64urlToBuffer(base64url) {
+            // Re-add padding
+            let paddingLength = 4 - (base64url.length % 4);
+            if (paddingLength === 4) {
+                paddingLength = 0;
+            }
+            const padding = '='.repeat(paddingLength);
+            const base64 = (base64url + padding).replace(/\-/g, '+').replace(/_/g, '/');
+            const rawData = atob(base64);
+            const outputArray = new Uint8Array(rawData.length);
+            for (let i = 0; i < rawData.length; ++i) {
+                outputArray[i] = rawData.charCodeAt(i);
+            }
+            return outputArray.buffer;
+        }
+
+        // --- Logging ---
+        function showStatus(message, isError = false) {
+            const el = document.getElementById('status');
+            el.textContent = message;
+            el.className = isError ? 'error' : 'success';
+            el.style.display = 'block';
+        }
+
+        function log(data) {
+            document.getElementById('log').textContent = JSON.stringify(data, null, 2);
+        }
+
+        // --- Registration ---
+        async function register() {
+            try {
+                showStatus("Requesting registration options...");
+                const username = document.getElementById('username').value;
+                
+                // 1. Get options from server
+                const optResponse = await fetch('/register/options', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username: username, displayName: username })
+                });
+                
+                if (!optResponse.ok) throw new Error(await optResponse.text());
+                const options = await optResponse.json();
+                log(options);
+
+                // 2. Prepare options for the browser API
+                options.challenge = base64urlToBuffer(options.challenge);
+                options.user.id = base64urlToBuffer(options.user.id);
+                if (options.excludeCredentials) {
+                    options.excludeCredentials.forEach(c => c.id = base64urlToBuffer(c.id));
+                }
+
+                // 3. Ask browser to create credential
+                showStatus("Waiting for user interaction...");
+                const credential = await navigator.credentials.create({ publicKey: options });
+
+                // 4. Prepare response for the server
+                const responsePayload = {
+                    id: credential.id,
+                    type: credential.type,
+                    response: {
+                        clientDataJSON: bufferToBase64url(credential.response.clientDataJSON),
+                        attestationObject: bufferToBase64url(credential.response.attestationObject),
+                        transports: credential.response.getTransports ? credential.response.getTransports() : []
+                    }
+                };
+
+                // 5. Send response to server to verify
+                showStatus("Verifying registration...");
+                const verifyResponse = await fetch('/register/verify', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(responsePayload)
+                });
+
+                if (!verifyResponse.ok) throw new Error(await verifyResponse.text());
+                const result = await verifyResponse.json();
+                
+                showStatus("Registration successful!");
+                log(result);
+
+            } catch (err) {
+                showStatus(err.message, true);
+                console.error(err);
+            }
+        }
+
+        // --- Authentication ---
+        async function authenticate() {
+            try {
+                showStatus("Requesting authentication options...");
+                
+                // 1. Get options from server
+                const optResponse = await fetch('/authenticate/options', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({})
+                });
+                
+                if (!optResponse.ok) throw new Error(await optResponse.text());
+                const options = await optResponse.json();
+                log(options);
+
+                // 2. Prepare options for browser API
+                options.challenge = base64urlToBuffer(options.challenge);
+                if (options.allowCredentials) {
+                    options.allowCredentials.forEach(c => c.id = base64urlToBuffer(c.id));
+                }
+
+                // 3. Ask browser to get credential
+                showStatus("Waiting for user interaction...");
+                const assertion = await navigator.credentials.get({ publicKey: options });
+
+                // 4. Prepare response for the server
+                const responsePayload = {
+                    id: assertion.id,
+                    type: assertion.type,
+                    response: {
+                        authenticatorData: bufferToBase64url(assertion.response.authenticatorData),
+                        clientDataJSON: bufferToBase64url(assertion.response.clientDataJSON),
+                        signature: bufferToBase64url(assertion.response.signature),
+                        userHandle: assertion.response.userHandle ? bufferToBase64url(assertion.response.userHandle) : null
+                    }
+                };
+
+                // 5. Send response to server to verify
+                showStatus("Verifying authentication...");
+                const verifyResponse = await fetch('/authenticate/verify', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(responsePayload)
+                });
+
+                if (!verifyResponse.ok) throw new Error(await verifyResponse.text());
+                const result = await verifyResponse.json();
+                
+                showStatus("Authentication successful!");
+                log(result);
+
+            } catch (err) {
+                showStatus(err.message, true);
+                console.error(err);
+            }
+        }
+    </script>
+</body>
+</html>
