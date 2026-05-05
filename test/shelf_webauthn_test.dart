@@ -8,6 +8,41 @@ import 'package:convert/convert.dart';
 import 'vectors.dart';
 
 void main() {
+  group('WebAuthnServer.generateRegistrationOptions', () {
+    test('generates valid options with secure challenge', () {
+      final server = WebAuthnServer(
+        rpId: 'example.org',
+        expectedOrigin: 'https://example.org',
+      );
+
+      final options = server.generateRegistrationOptions(
+        userId: 'user-123',
+        username: 'alice',
+        userDisplayName: 'Alice Smith',
+      );
+
+      expect(options.rp.id, equals('example.org'));
+      expect(options.rp.name, equals('example.org'));
+
+      expect(options.user.id, equals('user-123'));
+      expect(options.user.name, equals('alice'));
+      expect(options.user.displayName, equals('Alice Smith'));
+
+      // Challenge must be base64url encoded and at least 16 bytes
+      expect(options.challenge, isNotEmpty);
+      final challengeBytes = base64Url.decode(
+        base64Url.normalize(options.challenge),
+      );
+      expect(challengeBytes.length, greaterThanOrEqualTo(16));
+      expect(options.challenge.contains('='), isFalse); // No padding
+
+      // Default pubKeyCredParams
+      expect(options.pubKeyCredParams.length, equals(2));
+      expect(options.pubKeyCredParams[0].alg, equals(-7)); // ES256
+      expect(options.pubKeyCredParams[1].alg, equals(-257)); // RS256
+    });
+  });
+
   group('WebAuthnServer.verifyRegistrationResponse', () {
     test('successfully verifies a valid "none" attestation response', () async {
       final server = WebAuthnServer(

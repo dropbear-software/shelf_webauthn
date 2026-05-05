@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math';
 import 'dart:typed_data';
 import 'package:collection/collection.dart';
 import 'package:crypto/crypto.dart' as crypto;
@@ -30,9 +31,45 @@ class WebAuthnServer {
   PublicKeyCredentialCreationOptions generateRegistrationOptions({
     required String userId,
     required String username,
+    String? userDisplayName,
+    int? timeout,
+    List<PubKeyCredParam>? pubKeyCredParams,
+    List<String>? excludeCredentials,
+    AuthenticatorSelectionCriteria? authenticatorSelection,
+    String? attestation,
+    Map<String, dynamic>? extensions,
   }) {
-    // TODO: Implement secure random challenge generation and build options
-    throw UnimplementedError('Registration generation is not yet implemented.');
+    final random = Random.secure();
+    final challengeBytes = Uint8List.fromList(
+      List<int>.generate(32, (_) => random.nextInt(256)),
+    );
+    final challenge = base64Url.encode(challengeBytes).replaceAll('=', '');
+
+    return PublicKeyCredentialCreationOptions(
+      rp: RelyingPartyEntity(
+        id: rpId,
+        name: rpId, // Defaulting name to rpId, can be expanded later
+      ),
+      user: UserEntity(
+        id: userId,
+        name: username,
+        displayName: userDisplayName ?? username,
+      ),
+      challenge: challenge,
+      pubKeyCredParams:
+          pubKeyCredParams ??
+          const [
+            // ES256
+            PubKeyCredParam(alg: -7),
+            // RS256
+            PubKeyCredParam(alg: -257),
+          ],
+      timeout: timeout,
+      excludeCredentials: excludeCredentials,
+      authenticatorSelection: authenticatorSelection,
+      attestation: attestation,
+      extensions: extensions,
+    );
   }
 
   /// Verifies an attestation response received from a client during registration.
