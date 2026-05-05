@@ -3,25 +3,47 @@ import 'dart:typed_data';
 import 'package:collection/collection.dart';
 import '../exceptions.dart';
 
+/// The type of WebAuthn ceremony.
+enum ClientDataType {
+  /// "webauthn.create" - Registration ceremony.
+  create('webauthn.create'),
+
+  /// "webauthn.get" - Authentication ceremony.
+  get('webauthn.get');
+
+  final String value;
+  const ClientDataType(this.value);
+
+  /// Parses a string into a [ClientDataType].
+  static ClientDataType fromString(String value) {
+    return ClientDataType.values.firstWhere(
+      (e) => e.value == value,
+      orElse: () => throw InvalidAuthenticatorDataException(
+        'Unknown clientData type: $value',
+      ),
+    );
+  }
+}
+
 /// Represents the contextual information provided by the browser during a
 /// WebAuthn ceremony.
 ///
 /// See Section 5.8.1 of the WebAuthn specification.
 class CollectedClientData {
-  /// The type of ceremony. Either "webauthn.create" or "webauthn.get".
-  final String type;
+  /// The type of ceremony.
+  final ClientDataType type;
 
   /// The base64url-encoded challenge provided by the Relying Party.
   final String challenge;
 
   /// The fully qualified origin of the requester.
-  final String origin;
+  final Uri origin;
 
   /// Whether the request was made from a cross-origin context.
   final bool? crossOrigin;
 
   /// The top-level origin, if available.
-  final String? topOrigin;
+  final Uri? topOrigin;
 
   /// The raw JSON map, including any unknown fields for future-proofing.
   final Map<String, dynamic> rawData;
@@ -35,7 +57,6 @@ class CollectedClientData {
     required Map<String, dynamic> rawData,
   }) : rawData = UnmodifiableMapView(rawData);
 
-  /// Decoded challenge bytes.
   Uint8List? _decodedChallenge;
 
   /// Returns the challenge bytes, decoding them if necessary.
@@ -52,7 +73,8 @@ class CollectedClientData {
     }
 
     try {
-      _decodedChallenge = base64Url.decode(normalized);
+      final decoded = base64Url.decode(normalized);
+      _decodedChallenge = decoded.asUnmodifiableView();
       return _decodedChallenge!;
     } catch (e) {
       throw InvalidAuthenticatorDataException('Malformed challenge base64: $e');
@@ -61,7 +83,7 @@ class CollectedClientData {
 
   /// Validates the client data against the expected context.
   void verify({
-    required String expectedType,
+    required ClientDataType expectedType,
     required List<int> expectedChallenge,
     required String expectedOrigin,
     bool allowCrossOrigin = false,
@@ -69,7 +91,7 @@ class CollectedClientData {
     // 1. Verify type
     if (type != expectedType) {
       throw InvalidAuthenticatorDataException(
-        'Unexpected clientData type: expected $expectedType, got $type',
+        'Unexpected clientData type: expected ${expectedType.value}, got ${type.value}',
       );
     }
 
@@ -79,9 +101,9 @@ class CollectedClientData {
     }
 
     // 3. Verify origin
-    if (origin != expectedOrigin) {
+    if (origin.toString() != expectedOrigin) {
       throw InvalidAuthenticatorDataException(
-        'Origin mismatch: expected $expectedOrigin, got $origin',
+        'Origin mismatch: expected $expectedOrigin, got ${origin.toString()}',
       );
     }
 
@@ -105,23 +127,31 @@ class CollectedClientData {
       );
     }
 
-    final type = map['type'];
+    final typeStr = map['type'];
     final challenge = map['challenge'];
-    final origin = map['origin'];
+    final originStr = map['origin'];
 
-    if (type is! String || challenge is! String || origin is! String) {
+    if (typeStr is! String || challenge is! String || originStr is! String) {
       throw InvalidAuthenticatorDataException(
         'Missing required fields in clientDataJSON',
       );
     }
 
-    return CollectedClientData(
-      type: type,
-      challenge: challenge,
-      origin: origin,
-      crossOrigin: map['crossOrigin'] as bool?,
-      topOrigin: map['topOrigin'] as String?,
-      rawData: map,
-    );
+    try {
+      return CollectedClientData(
+        type: ClientDataType.fromString(typeStr),
+        challenge: challenge,
+        origin: Uri.parse(originStr),
+        crossOrigin: map['crossOrigin'] as bool?,
+        topOrigin: map['topOrigin'] != null
+            ? Uri.parse(map['topOrigin'] as String)
+            : null,
+        rawData: map,
+      );
+    } catch (e) {
+      throw InvalidAuthenticatorDataException(
+        'Invalid URI in clientDataJSON: $e',
+      );
+    }
   }
 }

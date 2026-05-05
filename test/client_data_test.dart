@@ -16,15 +16,15 @@ void main() {
 
       final clientData = CollectedClientData.parse(clientDataBytes);
 
-      expect(clientData.type, equals('webauthn.create'));
-      expect(clientData.origin, equals('https://example.org'));
+      expect(clientData.type, equals(ClientDataType.create));
+      expect(clientData.origin.toString(), equals('https://example.org'));
       expect(clientData.crossOrigin, isFalse);
       expect(clientData.rawData['extraData'], isNotNull);
 
       // Verify validation logic
       final expectedChallenge = hex.decode(vector.registration['challenge']!);
       clientData.verify(
-        expectedType: 'webauthn.create',
+        expectedType: ClientDataType.create,
         expectedChallenge: expectedChallenge,
         expectedOrigin: 'https://example.org',
       );
@@ -39,13 +39,13 @@ void main() {
 
       final clientData = CollectedClientData.parse(clientDataBytes);
 
-      expect(clientData.type, equals('webauthn.get'));
-      expect(clientData.origin, equals('https://example.org'));
+      expect(clientData.type, equals(ClientDataType.get));
+      expect(clientData.origin.toString(), equals('https://example.org'));
 
       // Verify validation logic
       final expectedChallenge = hex.decode(vector.authentication['challenge']!);
       clientData.verify(
-        expectedType: 'webauthn.get',
+        expectedType: ClientDataType.get,
         expectedChallenge: expectedChallenge,
         expectedOrigin: 'https://example.org',
       );
@@ -72,7 +72,7 @@ void main() {
 
       expect(
         () => clientData.verify(
-          expectedType: 'webauthn.get',
+          expectedType: ClientDataType.get,
           expectedChallenge: [0, 0, 0],
           expectedOrigin: 'https://example.org',
         ),
