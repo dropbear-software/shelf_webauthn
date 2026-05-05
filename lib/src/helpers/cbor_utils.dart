@@ -32,10 +32,15 @@ import '../exceptions.dart';
     // (some objects might only be "complete" once the stream ends)
     try {
       sink.close();
+      if (result != null) {
+        // If result was found only after close, it means we consumed
+        // the entire input buffer.
+        consumed = data.length;
+      }
     } catch (_) {
       // Ignore errors during close if we already have no result
     }
-    
+
     if (result == null) {
       throw InvalidAuthenticatorDataException('No valid CBOR object found');
     }

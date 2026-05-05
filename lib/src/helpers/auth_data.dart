@@ -1,9 +1,35 @@
+import 'dart:collection';
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:cbor/cbor.dart';
 import 'package:webcrypto/webcrypto.dart';
 import '../exceptions.dart';
 import 'cbor_utils.dart';
+
+/// Constants for COSE key labels.
+///
+/// See RFC 9052.
+abstract class _Cose {
+  static const int kty = 1;
+  static const int alg = 3;
+  static const int crv = -1;
+  static const int x = -2;
+  static const int y = -3;
+  static const int n = -1;
+  static const int e = -2;
+}
+
+/// Constants for Authenticator Data flags.
+///
+/// See Section 6.1 of the WebAuthn specification.
+abstract class _Flags {
+  static const int up = 0x01;
+  static const int uv = 0x04;
+  static const int be = 0x08;
+  static const int bs = 0x10;
+  static const int at = 0x40;
+  static const int ed = 0x80;
+}
 
 /// Represents the parsed `authenticatorData` (authData) structure.
 ///
@@ -35,32 +61,38 @@ class AuthenticatorData {
   final Map<String, dynamic>? extensions;
 
   AuthenticatorData({
-    required this.rpIdHash,
+    required Uint8List rpIdHash,
     required this.flags,
     required this.signCount,
-    this.aaguid,
-    this.credentialId,
-    this.credentialPublicKey,
-    this.extensions,
-  });
+    Uint8List? aaguid,
+    Uint8List? credentialId,
+    Map<int, dynamic>? credentialPublicKey,
+    Map<String, dynamic>? extensions,
+  }) : rpIdHash = rpIdHash.asUnmodifiableView(),
+       aaguid = aaguid?.asUnmodifiableView(),
+       credentialId = credentialId?.asUnmodifiableView(),
+       credentialPublicKey = credentialPublicKey != null
+           ? UnmodifiableMapView(credentialPublicKey)
+           : null,
+       extensions = extensions != null ? UnmodifiableMapView(extensions) : null;
 
   /// User Present (UP) flag.
-  bool get isUserPresent => (flags & 0x01) != 0;
+  bool get isUserPresent => (flags & _Flags.up) != 0;
 
   /// User Verified (UV) flag.
-  bool get isUserVerified => (flags & 0x04) != 0;
+  bool get isUserVerified => (flags & _Flags.uv) != 0;
 
   /// Backup Eligibility (BE) flag.
-  bool get isBackupEligible => (flags & 0x08) != 0;
+  bool get isBackupEligible => (flags & _Flags.be) != 0;
 
   /// Backup State (BS) flag.
-  bool get isBackedUp => (flags & 0x10) != 0;
+  bool get isBackedUp => (flags & _Flags.bs) != 0;
 
   /// Attested Credential Data (AT) flag.
-  bool get hasAttestedCredentialData => (flags & 0x40) != 0;
+  bool get hasAttestedCredentialData => (flags & _Flags.at) != 0;
 
   /// Extension Data (ED) flag.
-  bool get hasExtensions => (flags & 0x80) != 0;
+  bool get hasExtensions => (flags & _Flags.ed) != 0;
 
   /// Converts the [credentialPublicKey] map to a `webcrypto` public key object.
   ///
@@ -71,8 +103,8 @@ class AuthenticatorData {
     final key = credentialPublicKey;
     if (key == null) return null;
 
-    final kty = key[1] as int?;
-    final alg = key[3] as int?;
+    final kty = key[_Cose.kty] as int?;
+    final alg = key[_Cose.alg] as int?;
 
     return switch (kty) {
       2 => _parseEcKey(key, alg),
@@ -82,9 +114,9 @@ class AuthenticatorData {
   }
 
   Future<EcdsaPublicKey> _parseEcKey(Map<int, dynamic> key, int? alg) {
-    final crv = key[-1] as int?;
-    final x = key[-2] as List<int>?;
-    final y = key[-3] as List<int>?;
+    final crv = key[_Cose.crv] as int?;
+    final x = key[_Cose.x] as List<int>?;
+    final y = key[_Cose.y] as List<int>?;
 
     if (x == null || y == null) {
       throw InvalidAuthenticatorDataException('Missing EC coordinates');
@@ -117,8 +149,8 @@ class AuthenticatorData {
   }
 
   Future<Object> _parseRsaKey(Map<int, dynamic> key, int? alg) {
-    final n = key[-1] as List<int>?;
-    final e = key[-2] as List<int>?;
+    final n = key[_Cose.n] as List<int>?;
+    final e = key[_Cose.e] as List<int>?;
 
     if (n == null || e == null) {
       throw InvalidAuthenticatorDataException('Missing RSA parameters');
@@ -132,15 +164,16 @@ class AuthenticatorData {
 
     return switch (alg) {
       -257 => () {
-          jwk['alg'] = 'RS256';
-          return RsassaPkcs1V15PublicKey.importJsonWebKey(jwk, Hash.sha256);
-        }(),
+        jwk['alg'] = 'RS256';
+        return RsassaPkcs1V15PublicKey.importJsonWebKey(jwk, Hash.sha256);
+      }(),
       -37 => () {
-          jwk['alg'] = 'PS256';
-          return RsaPssPublicKey.importJsonWebKey(jwk, Hash.sha256);
-        }(),
-      _ =>
-        throw UnsupportedAlgorithmException('Unsupported RSA algorithm: $alg'),
+        jwk['alg'] = 'PS256';
+        return RsaPssPublicKey.importJsonWebKey(jwk, Hash.sha256);
+      }(),
+      _ => throw UnsupportedAlgorithmException(
+        'Unsupported RSA algorithm: $alg',
+      ),
     };
   }
 
@@ -153,11 +186,7 @@ class AuthenticatorData {
     }
 
     final buffer = data.buffer;
-    final byteData = ByteData.view(
-      buffer,
-      data.offsetInBytes,
-      data.length,
-    );
+    final byteData = ByteData.view(buffer, data.offsetInBytes, data.length);
     int offset = 0;
 
     // 1. rpIdHash (32 bytes)
@@ -177,7 +206,7 @@ class AuthenticatorData {
     Map<int, dynamic>? credentialPublicKey;
 
     // 4. attestedCredentialData (if AT flag set)
-    if ((flags & 0x40) != 0) {
+    if ((flags & _Flags.at) != 0) {
       if (data.length < offset + 18) {
         throw InvalidAuthenticatorDataException(
           'Insufficient data for attestedCredentialData',
@@ -225,7 +254,7 @@ class AuthenticatorData {
 
     // 5. extensions (if ED flag set)
     Map<String, dynamic>? extensions;
-    if ((flags & 0x80) != 0) {
+    if ((flags & _Flags.ed) != 0) {
       final remaining = data.sublist(offset);
       final (cborValue, consumed) = decodeOne(remaining);
 
@@ -237,6 +266,13 @@ class AuthenticatorData {
       }
 
       offset += consumed;
+    }
+
+    // Security check: Verify no trailing garbage bytes.
+    if (offset < data.length) {
+      throw InvalidAuthenticatorDataException(
+        'Trailing bytes found after authenticator data (${data.length - offset} bytes)',
+      );
     }
 
     return AuthenticatorData(
