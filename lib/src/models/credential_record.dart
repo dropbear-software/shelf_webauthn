@@ -10,6 +10,7 @@ final class CredentialRecord {
   final List<String>? transports;
   final bool backupEligible;
   final bool backupState;
+  final List<int> userHandle;
 
   // Optional contents
   final Uint8List? attestationObject;
@@ -24,6 +25,7 @@ final class CredentialRecord {
     this.transports,
     required this.backupEligible,
     required this.backupState,
+    required this.userHandle,
     this.attestationObject,
     this.attestationClientDataJSON,
   });
@@ -41,6 +43,7 @@ final class CredentialRecord {
           const ListEquality().equals(transports, other.transports) &&
           backupEligible == other.backupEligible &&
           backupState == other.backupState &&
+          const ListEquality().equals(userHandle, other.userHandle) &&
           const ListEquality().equals(
             attestationObject,
             other.attestationObject,
@@ -60,6 +63,7 @@ final class CredentialRecord {
       const ListEquality().hash(transports) ^
       backupEligible.hashCode ^
       backupState.hashCode ^
+      const ListEquality().hash(userHandle) ^
       const ListEquality().hash(attestationObject) ^
       const ListEquality().hash(attestationClientDataJSON);
 }

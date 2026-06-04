@@ -86,6 +86,7 @@ class WebAuthnServer {
   Future<CredentialRecord> verifyRegistrationResponse({
     required AuthenticatorAttestationResponse response,
     required String expectedChallenge,
+    required List<int> userHandle,
     bool requireUserVerification = false,
     List<int>? allowedAlgs,
     Future<bool> Function(Uint8List credentialId)? existingCredentialCheck,
@@ -202,6 +203,7 @@ class WebAuthnServer {
       transports: response.transports,
       backupEligible: authData.isBackupEligible,
       backupState: authData.isBackedUp,
+      userHandle: userHandle,
       attestationObject: response.attestationObject,
       attestationClientDataJSON: response.clientDataJSON,
     );
@@ -239,6 +241,18 @@ class WebAuthnServer {
     required CredentialRecord storedCredential,
     bool requireUserVerification = false,
   }) async {
+    // 6: Verify userHandle matches stored credential userHandle if present in assertion response
+    if (response.userHandle != null) {
+      if (!const ListEquality().equals(
+        response.userHandle,
+        storedCredential.userHandle,
+      )) {
+        throw WebAuthnException(
+          'User handle mismatch: owner does not match assertion userHandle',
+        );
+      }
+    }
+
     // 7-10: Parse and verify clientDataJSON
     final clientData = CollectedClientData.parse(response.clientDataJSON);
 

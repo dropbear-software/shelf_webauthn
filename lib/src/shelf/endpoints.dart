@@ -164,6 +164,7 @@ class WebAuthnEndpoints {
         final record = await server.verifyRegistrationResponse(
           response: response,
           expectedChallenge: expectedChallenge,
+          userHandle: base64Url.decode(base64Url.normalize(userId)),
           existingCredentialCheck: (id) async {
             final idStr = base64Url.encode(id).replaceAll('=', '');
             return await credentialStore.isCredentialIdRegistered(idStr);

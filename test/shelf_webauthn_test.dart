@@ -144,6 +144,7 @@ void main() {
       final credentialRecord = await server.verifyRegistrationResponse(
         response: response,
         expectedChallenge: expectedChallengeBase64Url,
+        userHandle: Uint8List.fromList([1, 2, 3, 4]),
       );
 
       expect(credentialRecord.credentialType, equals('public-key'));
@@ -178,6 +179,7 @@ void main() {
         server.verifyRegistrationResponse(
           response: response,
           expectedChallenge: expectedChallengeBase64Url,
+          userHandle: Uint8List.fromList([1, 2, 3, 4]),
         ),
         throwsA(isA<InvalidAuthenticatorDataException>()),
       );
@@ -205,6 +207,7 @@ void main() {
         await server.verifyRegistrationResponse(
           response: response,
           expectedChallenge: expectedChallengeBase64Url,
+          userHandle: Uint8List.fromList([1, 2, 3, 4]),
         );
 
         expect(mockVerifier.verified, isTrue);
@@ -233,6 +236,7 @@ void main() {
           server.verifyRegistrationResponse(
             response: response,
             expectedChallenge: expectedChallengeBase64Url,
+            userHandle: Uint8List.fromList([1, 2, 3, 4]),
           ),
           throwsA(isA<UnsupportedAlgorithmException>()),
         );
@@ -259,6 +263,7 @@ void main() {
       final storedCredential = await server.verifyRegistrationResponse(
         response: regResponse,
         expectedChallenge: expectedRegChallengeBase64Url,
+        userHandle: Uint8List.fromList([1, 2, 3, 4]),
       );
 
       // Now verify the authentication phase
@@ -294,6 +299,7 @@ void main() {
       final storedCredential = await server.verifyRegistrationResponse(
         response: regResponse,
         expectedChallenge: expectedRegChallengeBase64Url,
+        userHandle: Uint8List.fromList([1, 2, 3, 4]),
       );
 
       final expectedAuthChallengeBase64Url = getChallengeFromVector(
@@ -320,5 +326,52 @@ void main() {
         throwsA(isA<WebAuthnException>()),
       );
     });
+
+    test(
+      'throws when userHandle is present but mismatch stored credential userHandle',
+      () async {
+        final server = WebAuthnServer(
+          rpId: 'example.org',
+          expectedOrigin: 'https://example.org',
+        );
+
+        final vector = testVectors.firstWhere(
+          (v) => v.name == 'sctn-test-vectors-none-es256',
+        );
+
+        final expectedRegChallengeBase64Url = getChallengeFromVector(
+          vector.registration,
+        );
+        final regResponse = buildRegistrationResponse(vector.registration);
+        final storedCredential = await server.verifyRegistrationResponse(
+          response: regResponse,
+          expectedChallenge: expectedRegChallengeBase64Url,
+          userHandle: Uint8List.fromList([1, 2, 3, 4]),
+        );
+
+        final authResponse = buildAuthenticationResponse(vector.authentication);
+        final badAuthResponse = AuthenticatorAssertionResponse(
+          clientDataJSON: authResponse.clientDataJSON,
+          authenticatorData: authResponse.authenticatorData,
+          signature: authResponse.signature,
+          userHandle: Uint8List.fromList([5, 6, 7, 8]),
+        );
+
+        await expectLater(
+          server.verifyAuthenticationResponse(
+            response: badAuthResponse,
+            expectedChallenge: getChallengeFromVector(vector.authentication),
+            storedCredential: storedCredential,
+          ),
+          throwsA(
+            isA<WebAuthnException>().having(
+              (e) => e.message,
+              'message',
+              contains('User handle mismatch'),
+            ),
+          ),
+        );
+      },
+    );
   });
 }
