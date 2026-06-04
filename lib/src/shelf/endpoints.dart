@@ -3,6 +3,7 @@ import 'package:shelf/shelf.dart';
 import 'package:shelf_router/shelf_router.dart';
 import '../shelf_webauthn_base.dart';
 import '../models/models.dart';
+import '../exceptions.dart';
 import 'parsers.dart';
 
 /// An interface for storing and retrieving temporary WebAuthn challenges.
@@ -63,6 +64,50 @@ class WebAuthnEndpoints {
     this.getAllowCredentials,
   });
 
+  Response _jsonResponse(Map<String, dynamic> json, {int status = 200}) {
+    return Response(
+      status,
+      body: jsonEncode(json),
+      headers: {'content-type': 'application/json'},
+    );
+  }
+
+  Response _errorResponse(Object error) {
+    if (error is WebAuthnException) {
+      return Response.badRequest(
+        body: jsonEncode({'error': error.message}),
+        headers: {'content-type': 'application/json'},
+      );
+    }
+    return Response.internalServerError(
+      body: jsonEncode({'error': 'Internal server error: $error'}),
+      headers: {'content-type': 'application/json'},
+    );
+  }
+
+  Response _errorJson(String message, {int status = 400}) {
+    return Response(
+      status,
+      body: jsonEncode({'error': message}),
+      headers: {'content-type': 'application/json'},
+    );
+  }
+
+  Future<Map<String, dynamic>> _readJson(Request request) async {
+    final body = await request.readAsString();
+    if (body.isEmpty) return <String, dynamic>{};
+    try {
+      final decoded = jsonDecode(body);
+      if (decoded is! Map) {
+        throw WebAuthnException('JSON body must be a map');
+      }
+      return decoded.cast<String, dynamic>();
+    } catch (e) {
+      if (e is WebAuthnException) rethrow;
+      throw WebAuthnException('Malformed JSON body: $e');
+    }
+  }
+
   /// Returns a configured [Router] with the standard 4 WebAuthn endpoints:
   ///
   /// - POST `/register/options`
@@ -78,12 +123,11 @@ class WebAuthnEndpoints {
         final sessionId = getSessionId(request);
         final userId = getUserId(request);
 
-        final body = await request.readAsString();
-        final json = jsonDecode(body) as Map<String, dynamic>;
+        final json = await _readJson(request);
 
         final username = json['username'] as String?;
         if (username == null) {
-          return Response.badRequest(body: 'Missing username');
+          return _errorJson('Missing username');
         }
 
         final options = server.generateRegistrationOptions(
@@ -94,12 +138,9 @@ class WebAuthnEndpoints {
 
         await challengeStore.saveChallenge(sessionId, options.challenge);
 
-        return Response.ok(
-          jsonEncode(options.toJson()),
-          headers: {'content-type': 'application/json'},
-        );
+        return _jsonResponse(options.toJson());
       } catch (e) {
-        return Response.internalServerError(body: e.toString());
+        return _errorResponse(e);
       }
     });
 
@@ -113,11 +154,10 @@ class WebAuthnEndpoints {
           sessionId,
         );
         if (expectedChallenge == null) {
-          return Response.forbidden('Challenge expired or missing');
+          return _errorJson('Challenge expired or missing', status: 403);
         }
 
-        final body = await request.readAsString();
-        final json = jsonDecode(body) as Map<String, dynamic>;
+        final json = await _readJson(request);
 
         final response = parseRegistrationResponseJson(json);
 
@@ -132,12 +172,9 @@ class WebAuthnEndpoints {
 
         await credentialStore.saveCredential(userId, record);
 
-        return Response.ok(
-          '{"status":"success"}',
-          headers: {'content-type': 'application/json'},
-        );
+        return _jsonResponse({'status': 'success'});
       } catch (e) {
-        return Response.badRequest(body: e.toString());
+        return _errorResponse(e);
       }
     });
 
@@ -146,10 +183,7 @@ class WebAuthnEndpoints {
       try {
         final sessionId = getSessionId(request);
 
-        final body = await request.readAsString();
-        final json = body.isNotEmpty
-            ? jsonDecode(body) as Map<String, dynamic>
-            : <String, dynamic>{};
+        final json = await _readJson(request);
 
         List<PublicKeyCredentialDescriptor>? allowCredentials;
         if (getAllowCredentials != null) {
@@ -162,12 +196,9 @@ class WebAuthnEndpoints {
 
         await challengeStore.saveChallenge(sessionId, options.challenge);
 
-        return Response.ok(
-          jsonEncode(options.toJson()),
-          headers: {'content-type': 'application/json'},
-        );
+        return _jsonResponse(options.toJson());
       } catch (e) {
-        return Response.internalServerError(body: e.toString());
+        return _errorResponse(e);
       }
     });
 
@@ -180,22 +211,21 @@ class WebAuthnEndpoints {
           sessionId,
         );
         if (expectedChallenge == null) {
-          return Response.forbidden('Challenge expired or missing');
+          return _errorJson('Challenge expired or missing', status: 403);
         }
 
-        final body = await request.readAsString();
-        final json = jsonDecode(body) as Map<String, dynamic>;
+        final json = await _readJson(request);
 
         final credentialId = json['id'] as String?;
         if (credentialId == null) {
-          return Response.badRequest(body: 'Missing credential ID');
+          return _errorJson('Missing credential ID');
         }
 
         final storedCredential = await credentialStore.getCredential(
           credentialId,
         );
         if (storedCredential == null) {
-          return Response.notFound('Credential not found');
+          return _errorJson('Credential not found', status: 404);
         }
 
         final response = parseAuthenticationResponseJson(json);
@@ -206,12 +236,9 @@ class WebAuthnEndpoints {
           storedCredential: storedCredential,
         );
 
-        return Response.ok(
-          '{"status":"success"}',
-          headers: {'content-type': 'application/json'},
-        );
+        return _jsonResponse({'status': 'success'});
       } catch (e) {
-        return Response.badRequest(body: e.toString());
+        return _errorResponse(e);
       }
     });
 
