@@ -63,17 +63,8 @@ class CollectedClientData {
   Uint8List get decodedChallenge {
     if (_decodedChallenge != null) return _decodedChallenge!;
 
-    // Normalize base64url by adding required padding
-    String normalized = challenge;
-    switch (normalized.length % 4) {
-      case 2:
-        normalized += '==';
-      case 3:
-        normalized += '=';
-    }
-
     try {
-      final decoded = base64Url.decode(normalized);
+      final decoded = base64Url.decode(base64Url.normalize(challenge));
       _decodedChallenge = decoded.asUnmodifiableView();
       return _decodedChallenge!;
     } catch (e) {
