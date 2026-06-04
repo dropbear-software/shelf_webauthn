@@ -130,10 +130,23 @@ class WebAuthnEndpoints {
           return _errorJson('Missing username');
         }
 
+        AuthenticatorSelectionCriteria? authenticatorSelection;
+        if (json['authenticatorSelection'] is Map) {
+          final sel = json['authenticatorSelection'] as Map<String, dynamic>;
+          authenticatorSelection = AuthenticatorSelectionCriteria(
+            authenticatorAttachment: sel['authenticatorAttachment'] as String?,
+            requireResidentKey: sel['requireResidentKey'] as bool?,
+            residentKey: sel['residentKey'] as String?,
+            userVerification: sel['userVerification'] as String?,
+          );
+        }
+
         final options = server.generateRegistrationOptions(
           userId: userId,
           username: username,
           userDisplayName: json['displayName'] as String?,
+          authenticatorSelection: authenticatorSelection,
+          attestation: json['attestation'] as String?,
         );
 
         await challengeStore.saveChallenge(sessionId, options.challenge);
@@ -188,7 +201,10 @@ class WebAuthnEndpoints {
 
         List<PublicKeyCredentialDescriptor>? allowCredentials;
         if (getAllowCredentials != null) {
-          allowCredentials = await getAllowCredentials!(request, json);
+          final list = await getAllowCredentials!(request, json);
+          if (list.isNotEmpty) {
+            allowCredentials = list;
+          }
         }
 
         final options = server.generateAuthenticationOptions(

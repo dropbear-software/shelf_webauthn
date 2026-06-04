@@ -74,6 +74,11 @@ void main() async {
         base64Url.encode(utf8.encode('dummy-user-id')).replaceAll('=', ''),
     // Provide allowed credentials so authenticators know which keys to check for
     getAllowCredentials: (Request request, Map<String, dynamic> body) async {
+      // If username-less passkey login, keep allowCredentials empty so browser searches resident keys
+      if (body['username-less'] == true) {
+        return [];
+      }
+
       // In this simple demo, we fetch all credentials registered for our dummy user
       final dummyUserId = base64Url
           .encode(utf8.encode('dummy-user-id'))
@@ -100,6 +105,21 @@ void main() async {
       );
     }
     return Response.notFound('index.html not found');
+  });
+
+  appRouter.get('/passkey/', (Request request) async {
+    final file = File('example/passkey.html');
+    if (await file.exists()) {
+      return Response.ok(
+        file.openRead(),
+        headers: {'content-type': 'text/html'},
+      );
+    }
+    return Response.notFound('passkey.html not found');
+  });
+
+  appRouter.get('/passkey', (Request request) async {
+    return Response.movedPermanently('/passkey/');
   });
 
   // 6. Build the pipeline

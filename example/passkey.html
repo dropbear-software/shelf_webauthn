@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Passkey Demo - Shelf WebAuthn</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-gradient: linear-gradient(135deg, #0f0c1b 0%, #1e133c 50%, #0d0628 100%);
+            --card-bg: rgba(255, 255, 255, 0.04);
+            --card-border: rgba(255, 255, 255, 0.08);
+            --primary: #9d4edd;
+            --primary-hover: #b5179e;
+            --success: #06d6a0;
+            --error: #ff5a5f;
+            --text-main: #f8f9fa;
+            --text-muted: #adb5bd;
+            --mono-bg: rgba(0, 0, 0, 0.35);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Outfit', -apple-system, sans-serif;
+            background: var(--bg-gradient);
+            color: var(--text-main);
+            min-height: 100vh;
+            padding: 40px 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 40px;
+            max-width: 600px;
+        }
+
+        header h1 {
+            font-size: 2.8rem;
+            font-weight: 800;
+            margin-bottom: 12px;
+            background: linear-gradient(90deg, #e0aaff, #c77dff, #9d4edd, #ff70a6);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: -1px;
+        }
+
+        header p {
+            color: var(--text-muted);
+            font-size: 1.1rem;
+            line-height: 1.5;
+        }
+
+        main {
+            width: 100%;
+            max-width: 640px;
+            display: grid;
+            gap: 24px;
+        }
+
+        .card {
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 16px;
+            padding: 30px;
+            backdrop-filter: blur(12px);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+            transition: transform 0.2s ease, border-color 0.2s ease;
+        }
+
+        .card:hover {
+            border-color: rgba(157, 78, 221, 0.4);
+        }
+
+        .card-title {
+            font-size: 1.4rem;
+            font-weight: 600;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .input-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: var(--text-muted);
+            font-size: 0.9rem;
+            font-weight: 500;
+        }
+
+        input[type="text"] {
+            width: 100%;
+            padding: 12px 16px;
+            border-radius: 8px;
+            border: 1px solid var(--card-border);
+            background: rgba(0, 0, 0, 0.2);
+            color: var(--text-main);
+            font-family: inherit;
+            font-size: 1rem;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+
+        input[type="text"]:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 2px rgba(157, 78, 221, 0.25);
+        }
+
+        .button-row {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        button {
+            flex: 1;
+            min-width: 140px;
+            padding: 12px 24px;
+            border-radius: 8px;
+            border: none;
+            font-family: inherit;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s, transform 0.1s;
+        }
+
+        button.btn-primary {
+            background: var(--primary);
+            color: #ffffff;
+        }
+
+        button.btn-primary:hover {
+            background: var(--primary-hover);
+        }
+
+        button.btn-secondary {
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid var(--card-border);
+            color: var(--text-main);
+        }
+
+        button.btn-secondary:hover {
+            background: rgba(255, 255, 255, 0.15);
+        }
+
+        button:active {
+            transform: scale(0.98);
+        }
+
+        #status {
+            padding: 12px 16px;
+            border-radius: 8px;
+            font-size: 0.95rem;
+            font-weight: 500;
+            display: none;
+            margin-bottom: 20px;
+            animation: fadeIn 0.3s ease;
+        }
+
+        .status-success {
+            background: rgba(6, 214, 160, 0.15);
+            color: #52b788;
+            border: 1px solid rgba(6, 214, 160, 0.3);
+        }
+
+        .status-error {
+            background: rgba(255, 90, 95, 0.15);
+            color: #ff7096;
+            border: 1px solid rgba(255, 90, 95, 0.3);
+        }
+
+        .status-info {
+            background: rgba(157, 78, 221, 0.15);
+            color: #c77dff;
+            border: 1px solid rgba(157, 78, 221, 0.3);
+        }
+
+        pre {
+            background: var(--mono-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 12px;
+            padding: 16px;
+            overflow-x: auto;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.85rem;
+            max-height: 250px;
+            color: #e2eafc;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-4px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Passkeys in Action</h1>
+        <p>This demo creates standard <strong>syncable resident credentials (Passkeys)</strong>. You can sign in either by clicking the button or via browser autocomplete autofill suggestions.</p>
+    </header>
+
+    <main>
+        <div class="card">
+            <div id="status"></div>
+
+            <div class="card-title">🔑 1. Create a Passkey</div>
+            <div class="input-group">
+                <label for="username">Username / Email</label>
+                <input type="text" id="username" placeholder="passkey@example.com" value="user@example.com">
+            </div>
+            <div class="button-row">
+                <button onclick="registerPasskey()" class="btn-primary">Register Passkey</button>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-title">🔓 2. Sign In (Autofill Suggestion)</div>
+            <div class="input-group">
+                <label for="signin-username">Autofill Field (Click to trigger Passkey dropdown)</label>
+                <input type="text" id="signin-username" autocomplete="username webauthn" placeholder="Select passkey...">
+            </div>
+            <div class="button-row">
+                <button onclick="authenticatePasskey(false)" class="btn-primary">Sign in with Passkey</button>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-title">💻 Server Output Log</div>
+            <pre id="log">Logs will appear here...</pre>
+        </div>
+    </main>
+
+    <script>
+        // Global abort controller to cancel conditional autofill when starting a new operation
+        let conditionalUIAbortController = null;
+
+        // --- Base64URL Conversion Helpers ---
+        function bufferToBase64url(buffer) {
+            const bytes = new Uint8Array(buffer);
+            let str = '';
+            for (const charCode of bytes) {
+                str += String.fromCharCode(charCode);
+            }
+            return btoa(str).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+        }
+
+        function base64urlToBuffer(base64url) {
+            let paddingLength = 4 - (base64url.length % 4);
+            if (paddingLength === 4) paddingLength = 0;
+            const padding = '='.repeat(paddingLength);
+            const base64 = (base64url + padding).replace(/-/g, '+').replace(/_/g, '/');
+            const rawData = atob(base64);
+            const outputArray = new Uint8Array(rawData.length);
+            for (let i = 0; i < rawData.length; ++i) {
+                outputArray[i] = rawData.charCodeAt(i);
+            }
+            return outputArray.buffer;
+        }
+
+        function showStatus(message, type = 'info') {
+            const el = document.getElementById('status');
+            el.textContent = message;
+            el.className = '';
+            el.classList.add('status-' + type);
+            el.style.display = 'block';
+        }
+
+        function log(data) {
+            document.getElementById('log').textContent = JSON.stringify(data, null, 2);
+        }
+
+        // --- Button State Helper ---
+        function setButtonsDisabled(disabled) {
+            const buttons = document.querySelectorAll('button');
+            buttons.forEach(btn => btn.disabled = disabled);
+        }
+
+        // --- Abort Helper ---
+        async function abortPendingRequests() {
+            if (conditionalUIAbortController) {
+                conditionalUIAbortController.abort();
+                conditionalUIAbortController = null;
+                // Yield control to the event loop so the browser can cancel the ongoing request
+                // and clean up the internal WebAuthn pending state.
+                await new Promise(resolve => setTimeout(resolve, 150));
+            }
+        }
+
+        // --- Passkey Registration ---
+        async function registerPasskey() {
+            try {
+                setButtonsDisabled(true);
+                showStatus("Fetching registration options...", "info");
+                const username = document.getElementById('username').value;
+
+                // 1. Request Options with Resident Key selection criteria
+                const optResponse = await fetch('/register/options', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        username: username,
+                        displayName: username,
+                        // Tell backend we request a Resident Key (Passkey)
+                        authenticatorSelection: {
+                            residentKey: 'required',
+                            requireResidentKey: true,
+                            userVerification: 'required'
+                        }
+                    })
+                });
+
+                if (!optResponse.ok) throw new Error(await optResponse.text());
+                const options = await optResponse.json();
+                log(options);
+
+                // 2. Map Base64URL strings back to buffers
+                options.challenge = base64urlToBuffer(options.challenge);
+                options.user.id = base64urlToBuffer(options.user.id);
+                if (options.excludeCredentials) {
+                    options.excludeCredentials.forEach(c => c.id = base64urlToBuffer(c.id));
+                }
+
+                // Abort any active conditional UI background listener to prevent "A request is already pending"
+                await abortPendingRequests();
+
+                showStatus("Waiting for biometric/security key confirmation...", "info");
+                // 3. Trigger Browser Credentials API
+                const credential = await navigator.credentials.create({ publicKey: options });
+
+                const responsePayload = {
+                    id: credential.id,
+                    type: credential.type,
+                    response: {
+                        clientDataJSON: bufferToBase64url(credential.response.clientDataJSON),
+                        attestationObject: bufferToBase64url(credential.response.attestationObject),
+                        transports: credential.response.getTransports ? credential.response.getTransports() : []
+                    }
+                };
+
+                showStatus("Sending registration confirmation to server...", "info");
+                // 4. Send back verification confirmation
+                const verifyResponse = await fetch('/register/verify', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(responsePayload)
+                });
+
+                if (!verifyResponse.ok) throw new Error(await verifyResponse.text());
+                const result = await verifyResponse.json();
+                
+                showStatus("Passkey successfully registered!", "success");
+                log(result);
+            } catch (err) {
+                showStatus(err.message, "error");
+                console.error(err);
+            } finally {
+                setButtonsDisabled(false);
+            }
+        }
+
+        // --- Passkey Authentication & Conditional UI ---
+        async function authenticatePasskey(isConditional = false) {
+            try {
+                if (!isConditional) {
+                    setButtonsDisabled(true);
+                    showStatus("Fetching authentication options...", "info");
+                }
+                
+                // 1. Get Authentication Options
+                const optResponse = await fetch('/authenticate/options', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        // Specify we want username-less resident keys
+                        'username-less': true
+                    })
+                });
+                
+                if (!optResponse.ok) throw new Error(await optResponse.text());
+                const options = await optResponse.json();
+
+                options.challenge = base64urlToBuffer(options.challenge);
+                if (options.allowCredentials) {
+                    options.allowCredentials.forEach(c => c.id = base64urlToBuffer(c.id));
+                }
+
+                // Abort any active conditional UI background listener if triggering a manual sign-in
+                if (!isConditional) {
+                    await abortPendingRequests();
+                }
+
+                if (!isConditional) {
+                    showStatus("Waiting for authentication verification...", "info");
+                }
+
+                // 2. Select mediation method
+                const queryOptions = { publicKey: options };
+                if (isConditional) {
+                    conditionalUIAbortController = new AbortController();
+                    queryOptions.signal = conditionalUIAbortController.signal;
+                    queryOptions.mediation = 'conditional';
+                }
+
+                // 3. Start Browser getAssertion API
+                const assertion = await navigator.credentials.get(queryOptions);
+
+                const responsePayload = {
+                    id: assertion.id,
+                    type: assertion.type,
+                    response: {
+                        authenticatorData: bufferToBase64url(assertion.response.authenticatorData),
+                        clientDataJSON: bufferToBase64url(assertion.response.clientDataJSON),
+                        signature: bufferToBase64url(assertion.response.signature),
+                        userHandle: assertion.response.userHandle ? bufferToBase64url(assertion.response.userHandle) : null
+                    }
+                };
+
+                if (isConditional) {
+                    showStatus("Processing Conditional Autofill sign-in...", "info");
+                } else {
+                    showStatus("Sending assertion verification to server...", "info");
+                }
+
+                // 4. Verify assertion on server
+                const verifyResponse = await fetch('/authenticate/verify', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(responsePayload)
+                });
+
+                if (!verifyResponse.ok) throw new Error(await verifyResponse.text());
+                const result = await verifyResponse.json();
+                
+                showStatus("Successfully signed in with Passkey!", "success");
+                log(result);
+            } catch (err) {
+                // If it is conditional UI background wait, ignore abort errors (normal behavior)
+                if (isConditional && err.name === 'AbortError') return;
+                showStatus(err.message, "error");
+                console.error(err);
+            } finally {
+                if (!isConditional) {
+                    setButtonsDisabled(false);
+                }
+            }
+        }
+
+        // --- Setup Conditional UI Autofill on Load ---
+        window.addEventListener('DOMContentLoaded', async () => {
+            if (window.PublicKeyCredential && 
+                PublicKeyCredential.isConditionalMediationAvailable) {
+                try {
+                    const available = await PublicKeyCredential.isConditionalMediationAvailable();
+                    if (available) {
+                        // Start the autofill background listener immediately!
+                        authenticatePasskey(true);
+                    }
+                } catch (e) {
+                    console.warn("Conditional mediation check failed:", e);
+                }
+            }
+        });
+    </script>
+</body>
+</html>
