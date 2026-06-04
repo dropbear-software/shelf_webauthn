@@ -25,7 +25,15 @@ class WebAuthnServer {
   /// The expected origin of the client (e.g., "https://example.com").
   final String expectedOrigin;
 
-  WebAuthnServer({required this.rpId, required this.expectedOrigin});
+  /// The registry of attestation statement verifiers mapped by their format identifier.
+  final Map<String, AttestationStatementVerifier> attestationVerifiers;
+
+  WebAuthnServer({
+    required this.rpId,
+    required this.expectedOrigin,
+    Map<String, AttestationStatementVerifier>? attestationVerifiers,
+  }) : attestationVerifiers =
+           attestationVerifiers ?? {'none': NoneAttestationVerifier()};
 
   // --- Phase 1: Registration ---
 
@@ -151,12 +159,13 @@ class WebAuthnServer {
     }
 
     // 21-24: Attestation validation
-    if (attObj.fmt == 'none') {
-      final verifier = NoneAttestationVerifier();
-      await verifier.verify(attObj.attStmt, authData, clientDataHash);
-    } else {
-      throw WebAuthnException('Unsupported attestation format');
+    final verifier = attestationVerifiers[attObj.fmt];
+    if (verifier == null) {
+      throw UnsupportedAlgorithmException(
+        'Unsupported attestation format: ${attObj.fmt}',
+      );
     }
+    await verifier.verify(attObj.attStmt, authData, clientDataHash);
 
     // 25: Verify credentialId length <= 1023
     final credentialId = authData.credentialId;
@@ -312,47 +321,37 @@ class WebAuthnServer {
 
     bool signatureValid = false;
     try {
-      if (publicKey is EcdsaPublicKey) {
-        // WebCrypto expects raw R|S signatures, but WebAuthn authenticators
-        // return ASN.1 DER encoded signatures. We must convert them.
-        int curveSizeBytes;
-        final alg = credentialPublicKeyMap[Cose.alg] as int?;
-        if (alg == -7) {
-          curveSizeBytes = 32;
-        } else if (alg == -35) {
-          curveSizeBytes = 48;
-        } else if (alg == -36) {
-          curveSizeBytes = 66;
-        } else {
-          throw WebAuthnException(
-            'Unsupported ECDSA alg for signature conversion: $alg',
-          );
-        }
+      signatureValid = await switch (publicKey) {
+        EcdsaWebAuthnPublicKey(key: final ecdsaKey, alg: final alg) =>
+          () async {
+            final int curveSizeBytes = switch (alg) {
+              -7 => 32,
+              -35 => 48,
+              -36 => 66,
+              _ => throw WebAuthnException(
+                'Unsupported ECDSA alg for signature conversion: $alg',
+              ),
+            };
 
-        final rawSignature = convertDerToRawEcdsaSignature(
-          response.signature,
-          curveSizeBytes,
-        );
+            final rawSignature = convertDerToRawEcdsaSignature(
+              response.signature,
+              curveSizeBytes,
+            );
 
-        signatureValid = await publicKey.verifyBytes(
-          rawSignature,
-          concatData,
-          Hash.sha256,
-        );
-      } else if (publicKey is RsassaPkcs1V15PublicKey) {
-        signatureValid = await publicKey.verifyBytes(
-          response.signature,
-          concatData,
-        );
-      } else if (publicKey is RsaPssPublicKey) {
-        signatureValid = await publicKey.verifyBytes(
+            return await ecdsaKey.verifyBytes(
+              rawSignature,
+              concatData,
+              Hash.sha256,
+            );
+          }(),
+        RsassaPkcs1V15WebAuthnPublicKey(key: final rsaKey) =>
+          rsaKey.verifyBytes(response.signature, concatData),
+        RsaPssWebAuthnPublicKey(key: final rsaKey) => rsaKey.verifyBytes(
           response.signature,
           concatData,
           32, // saltLength for PS256 is equal to the hash length (32 bytes)
-        );
-      } else {
-        throw WebAuthnException('Unsupported public key type for verification');
-      }
+        ),
+      };
     } catch (e) {
       throw WebAuthnException('Signature verification failed: $e');
     }

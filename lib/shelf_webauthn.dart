@@ -6,5 +6,7 @@ export 'src/shelf_webauthn_base.dart';
 export 'src/models/models.dart';
 export 'src/helpers/auth_data.dart';
 export 'src/helpers/client_data.dart';
+export 'src/helpers/cose.dart';
+export 'src/helpers/attestation_statement.dart';
 export 'src/shelf/parsers.dart';
 export 'src/shelf/endpoints.dart';

@@ -80,10 +80,10 @@ class AuthenticatorData {
   /// Extension Data (ED) flag.
   bool get hasExtensions => (flags & _Flags.ed) != 0;
 
-  /// Converts the [credentialPublicKey] map to a `webcrypto` public key object.
+  /// Converts the [credentialPublicKey] map to a [WebAuthnPublicKey] object.
   ///
   /// Supports ES256, ES384, ES512, RS256, and PS256.
-  Future<Object?> toPublicKey() async {
+  Future<WebAuthnPublicKey?> toPublicKey() async {
     return parseCosePublicKey(credentialPublicKey);
   }
 

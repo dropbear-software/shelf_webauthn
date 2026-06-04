@@ -2,8 +2,8 @@ import 'dart:typed_data';
 import 'package:convert/convert.dart';
 import 'package:test/test.dart';
 import 'package:shelf_webauthn/src/helpers/auth_data.dart';
+import 'package:shelf_webauthn/src/helpers/cose.dart';
 import 'package:cbor/cbor.dart';
-import 'package:webcrypto/webcrypto.dart';
 import 'vectors.dart';
 
 void main() {
@@ -48,10 +48,10 @@ void main() {
 
       // Verify Public Key import
       final publicKey = await authData.toPublicKey();
-      expect(publicKey, isA<EcdsaPublicKey>());
+      expect(publicKey, isA<EcdsaWebAuthnPublicKey>());
 
-      final ecdsaKey = publicKey as EcdsaPublicKey;
-      final jwk = await ecdsaKey.exportJsonWebKey();
+      final ecdsaPublicKey = publicKey as EcdsaWebAuthnPublicKey;
+      final jwk = await ecdsaPublicKey.key.exportJsonWebKey();
       expect(jwk['kty'], equals('EC'));
       expect(jwk['crv'], equals('P-256'));
       // alg might be null depending on implementation
@@ -78,10 +78,10 @@ void main() {
 
       // Verify Public Key import
       final publicKey = await authData.toPublicKey();
-      expect(publicKey, isA<RsassaPkcs1V15PublicKey>());
+      expect(publicKey, isA<RsassaPkcs1V15WebAuthnPublicKey>());
 
-      final rsaKey = publicKey as RsassaPkcs1V15PublicKey;
-      final jwk = await rsaKey.exportJsonWebKey();
+      final rsaPublicKey = publicKey as RsassaPkcs1V15WebAuthnPublicKey;
+      final jwk = await rsaPublicKey.key.exportJsonWebKey();
       expect(jwk['kty'], equals('RSA'));
       expect(jwk['alg'], equals('RS256'));
     });

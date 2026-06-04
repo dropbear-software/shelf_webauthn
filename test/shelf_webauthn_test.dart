@@ -50,6 +50,19 @@ AuthenticatorAssertionResponse buildAuthenticationResponse(
   );
 }
 
+class MockAttestationVerifier extends AttestationStatementVerifier {
+  bool verified = false;
+
+  @override
+  Future<void> verify(
+    Map<String, dynamic> attStmt,
+    AuthenticatorData authData,
+    Uint8List clientDataHash,
+  ) async {
+    verified = true;
+  }
+}
+
 void main() {
   group('WebAuthnServer.generateRegistrationOptions', () {
     test('generates valid options with secure challenge', () {
@@ -169,6 +182,62 @@ void main() {
         throwsA(isA<InvalidAuthenticatorDataException>()),
       );
     });
+
+    test(
+      'uses registered custom attestation verifier for none format',
+      () async {
+        final mockVerifier = MockAttestationVerifier();
+        final server = WebAuthnServer(
+          rpId: 'example.org',
+          expectedOrigin: 'https://example.org',
+          attestationVerifiers: {'none': mockVerifier},
+        );
+
+        final vector = testVectors.firstWhere(
+          (v) => v.name == 'sctn-test-vectors-none-es256',
+        );
+
+        final expectedChallengeBase64Url = getChallengeFromVector(
+          vector.registration,
+        );
+        final response = buildRegistrationResponse(vector.registration);
+
+        await server.verifyRegistrationResponse(
+          response: response,
+          expectedChallenge: expectedChallengeBase64Url,
+        );
+
+        expect(mockVerifier.verified, isTrue);
+      },
+    );
+
+    test(
+      'throws UnsupportedAlgorithmException when attestation format has no verifier',
+      () async {
+        final server = WebAuthnServer(
+          rpId: 'example.org',
+          expectedOrigin: 'https://example.org',
+          attestationVerifiers: {}, // empty registry
+        );
+
+        final vector = testVectors.firstWhere(
+          (v) => v.name == 'sctn-test-vectors-none-es256',
+        );
+
+        final expectedChallengeBase64Url = getChallengeFromVector(
+          vector.registration,
+        );
+        final response = buildRegistrationResponse(vector.registration);
+
+        await expectLater(
+          server.verifyRegistrationResponse(
+            response: response,
+            expectedChallenge: expectedChallengeBase64Url,
+          ),
+          throwsA(isA<UnsupportedAlgorithmException>()),
+        );
+      },
+    );
   });
 
   group('WebAuthnServer.verifyAuthenticationResponse', () {

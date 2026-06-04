@@ -82,12 +82,36 @@ Uint8List convertDerToRawEcdsaSignature(
   return Uint8List.fromList([...rFormatted, ...sFormatted]);
 }
 
-/// Converts a COSE [credentialPublicKey] map to a `webcrypto` public key object.
+/// A sealed class hierarchy representing a parsed WebAuthn public key.
+sealed class WebAuthnPublicKey {
+  const WebAuthnPublicKey();
+}
+
+/// An ECDSA WebAuthn public key.
+final class EcdsaWebAuthnPublicKey extends WebAuthnPublicKey {
+  final EcdsaPublicKey key;
+  final int alg;
+  const EcdsaWebAuthnPublicKey(this.key, this.alg);
+}
+
+/// An RSA RsassaPkcs1V15 WebAuthn public key.
+final class RsassaPkcs1V15WebAuthnPublicKey extends WebAuthnPublicKey {
+  final RsassaPkcs1V15PublicKey key;
+  const RsassaPkcs1V15WebAuthnPublicKey(this.key);
+}
+
+/// An RSA RsaPss WebAuthn public key.
+final class RsaPssWebAuthnPublicKey extends WebAuthnPublicKey {
+  final RsaPssPublicKey key;
+  const RsaPssWebAuthnPublicKey(this.key);
+}
+
+/// Converts a COSE [credentialPublicKey] map to a [WebAuthnPublicKey] object.
 ///
 /// Supports ES256, ES384, ES512, RS256, and PS256.
 ///
-/// Returns one of: [EcdsaPublicKey], [RsassaPkcs1V15PublicKey], or [RsaPssPublicKey].
-Future<Object?> parseCosePublicKey(
+/// Returns one of: [EcdsaWebAuthnPublicKey], [RsassaPkcs1V15WebAuthnPublicKey], or [RsaPssWebAuthnPublicKey].
+Future<WebAuthnPublicKey?> parseCosePublicKey(
   Map<int, dynamic>? credentialPublicKey,
 ) async {
   if (credentialPublicKey == null) return null;
@@ -102,7 +126,10 @@ Future<Object?> parseCosePublicKey(
   };
 }
 
-Future<EcdsaPublicKey> _parseEcKey(Map<int, dynamic> key, int? alg) {
+Future<EcdsaWebAuthnPublicKey> _parseEcKey(
+  Map<int, dynamic> key,
+  int? alg,
+) async {
   final crv = key[Cose.crv] as int?;
   final x = (key[Cose.x] as List?)?.cast<int>();
   final y = (key[Cose.y] as List?)?.cast<int>();
@@ -135,10 +162,13 @@ Future<EcdsaPublicKey> _parseEcKey(Map<int, dynamic> key, int? alg) {
     if (algStr != null) jwk['alg'] = algStr;
   }
 
-  return EcdsaPublicKey.importJsonWebKey(jwk, curve);
+  final resolvedAlg = alg ?? -7;
+
+  final importedKey = await EcdsaPublicKey.importJsonWebKey(jwk, curve);
+  return EcdsaWebAuthnPublicKey(importedKey, resolvedAlg);
 }
 
-Future<Object> _parseRsaKey(Map<int, dynamic> key, int? alg) {
+Future<WebAuthnPublicKey> _parseRsaKey(Map<int, dynamic> key, int? alg) async {
   final n = (key[Cose.n] as List?)?.cast<int>();
   final e = (key[Cose.e] as List?)?.cast<int>();
 
@@ -153,13 +183,21 @@ Future<Object> _parseRsaKey(Map<int, dynamic> key, int? alg) {
   };
 
   return switch (alg) {
-    -257 => () {
+    -257 => () async {
       jwk['alg'] = 'RS256';
-      return RsassaPkcs1V15PublicKey.importJsonWebKey(jwk, Hash.sha256);
+      final importedKey = await RsassaPkcs1V15PublicKey.importJsonWebKey(
+        jwk,
+        Hash.sha256,
+      );
+      return RsassaPkcs1V15WebAuthnPublicKey(importedKey);
     }(),
-    -37 => () {
+    -37 => () async {
       jwk['alg'] = 'PS256';
-      return RsaPssPublicKey.importJsonWebKey(jwk, Hash.sha256);
+      final importedKey = await RsaPssPublicKey.importJsonWebKey(
+        jwk,
+        Hash.sha256,
+      );
+      return RsaPssWebAuthnPublicKey(importedKey);
     }(),
     _ => throw UnsupportedAlgorithmException('Unsupported RSA algorithm: $alg'),
   };
