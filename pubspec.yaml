@@ -2,7 +2,7 @@ name: shelf_webauthn
 description: A starting point for Dart libraries or applications.
 version: 0.1.0
 publish_to: none
-# repository: https://github.com/my_org/my_repo
+repository: https://github.com/dropbear-software/shelf_webauthn
 
 environment:
   sdk: ^3.11.5
